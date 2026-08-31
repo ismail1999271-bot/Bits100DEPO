@@ -28,7 +28,8 @@ def normalize_ohlcv(rows: Iterable[dict]) -> pd.DataFrame:
         frame[col] = pd.to_numeric(frame[col], errors="raise")
     if (frame[["open", "high", "low", "close", "volume"]] < 0).any().any():
         raise ValueError("OHLCV values cannot be negative")
-    return frame.drop_duplicates(["symbol", "timestamp"], keep="last").sort_values(["symbol", "timestamp"]).reset_index(drop=True)
+    return (frame.drop_duplicates(["symbol", "timestamp"], keep="last")
+            .sort_values(["symbol", "timestamp"]).reset_index(drop=True))
 
 def add_forward_labels(frame: pd.DataFrame, config: LabelConfig = LabelConfig()) -> pd.DataFrame:
     if config.limit_pct <= 0 or config.horizon_bars < 1:
