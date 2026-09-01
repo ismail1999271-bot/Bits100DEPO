@@ -1,8 +1,10 @@
-"""Historical OHLCV normalization and leakage-safe event labeling."""
+"""Historical OHLCV normalization, labeling, and candidate scoring facade."""
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Iterable
 import pandas as pd
+
+from .scoring import CandidateFeatures, score_candidate as _score_features
 
 REQUIRED_COLUMNS = ("symbol", "timestamp", "open", "high", "low", "close", "volume")
 
@@ -15,6 +17,16 @@ class LabelConfig:
 class DatasetSplit:
     train: pd.DataFrame
     test: pd.DataFrame
+
+@dataclass(frozen=True, slots=True)
+class CandidateEvidence:
+    """Compatibility facade for tests and simple rule-based ranking."""
+    symbol: str
+    pattern: float = 0.0
+    catalyst: float = 0.0
+    volume_anomaly: float = 0.0
+    manipulation_risk: float = 0.0
+
 
 def normalize_ohlcv(rows: Iterable[dict]) -> pd.DataFrame:
     frame = pd.DataFrame(rows)
@@ -31,6 +43,7 @@ def normalize_ohlcv(rows: Iterable[dict]) -> pd.DataFrame:
     return (frame.drop_duplicates(["symbol", "timestamp"], keep="last")
             .sort_values(["symbol", "timestamp"]).reset_index(drop=True))
 
+
 def add_forward_labels(frame: pd.DataFrame, config: LabelConfig = LabelConfig()) -> pd.DataFrame:
     if config.limit_pct <= 0 or config.horizon_bars < 1:
         raise ValueError("invalid label configuration")
@@ -40,6 +53,22 @@ def add_forward_labels(frame: pd.DataFrame, config: LabelConfig = LabelConfig())
     result["label_available"] = future_high.notna()
     return result
 
+
 def time_split(frame: pd.DataFrame, test_start: date | datetime) -> DatasetSplit:
     cutoff = pd.Timestamp(test_start, tz="UTC")
     return DatasetSplit(frame[frame["timestamp"] < cutoff].copy(), frame[frame["timestamp"] >= cutoff].copy())
+
+
+def score_candidate(candidate: CandidateEvidence) -> float:
+    features = CandidateFeatures(
+        volume_anomaly=candidate.volume_anomaly,
+        price_momentum=candidate.pattern,
+        catalyst_strength=candidate.catalyst,
+        manipulation_risk=candidate.manipulation_risk,
+    )
+    return _score_features(features)[0]
+
+
+def rank_candidates(candidates: list[CandidateEvidence]) -> list[tuple[str, float]]:
+    ranked = [(c.symbol, score_candidate(c)) for c in candidates]
+    return sorted(ranked, key=lambda item: item[1], reverse=True)
