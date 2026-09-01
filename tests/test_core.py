@@ -28,3 +28,12 @@ def test_candidate_ranking():
     weak = CandidateEvidence("WEAK")
     assert score_candidate(strong) > score_candidate(weak)
     assert rank_candidates([weak, strong])[0][0] == "STRONG"
+
+
+def test_candidate_score_has_real_0_100_bounds():
+    maximum = CandidateEvidence("MAX", pattern=1, catalyst=1, volume_anomaly=1)
+    minimum = CandidateEvidence("MIN")
+    risky = CandidateEvidence("RISK", pattern=1, catalyst=1, volume_anomaly=1, manipulation_risk=1)
+    assert score_candidate(maximum) <= 100
+    assert score_candidate(maximum) > score_candidate(risky)
+    assert score_candidate(minimum) == 0
