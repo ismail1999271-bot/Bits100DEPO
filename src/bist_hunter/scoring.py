@@ -47,11 +47,28 @@ def _clamp(value: float) -> float:
     return max(0.0, min(1.0, value))
 
 
-def score_candidate(features: CandidateFeatures, weights: dict[str, float] | None = None) -> tuple[float, tuple[str, ...]]:
-    """Return a 0-100 score and human-readable positive drivers."""
+def score_candidate(
+    features: CandidateFeatures,
+    weights: dict[str, float] | None = None,
+) -> tuple[float, tuple[str, ...]]:
+    """Return a calibrated 0-100 research score and positive drivers.
+
+    Positive dimensions are normalized by their total positive weight and
+    manipulation risk is applied as a separate penalty. Thus all-zero inputs
+    are 0, a fully strong candidate is 100, and high manipulation risk cannot
+    be hidden by strong positive features.
+    """
     weights = weights or DEFAULT_WEIGHTS
     values = features.values()
-    score = 50.0 + 50.0 * sum(weights[k] * (_clamp(v) - 0.5) for k, v in values.items())
+    positive = {k: w for k, w in weights.items() if w > 0}
+    positive_weight = sum(positive.values())
+    if positive_weight <= 0:
+        raise ValueError("weights must contain at least one positive weight")
+
+    positive_score = sum(positive[k] * _clamp(values[k]) for k in positive) / positive_weight
+    risk_weight = abs(weights.get("manipulation_risk", 0.0))
+    risk_penalty = risk_weight * _clamp(values["manipulation_risk"])
+    score = 100.0 * max(0.0, positive_score - risk_penalty)
     score = max(0.0, min(100.0, score))
     reasons = tuple(
         name
