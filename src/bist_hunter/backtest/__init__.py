@@ -1,4 +1,4 @@
-"""Backtesting package."""
-from .engine import CostModel, TradeResult, simulate_trade
+"""Unified backtesting package."""
+from .engine import CostModel, Metrics, TradeResult, evaluate, simulate_trade, walk_forward_splits
 
-__all__ = ["CostModel", "TradeResult", "simulate_trade"]
+__all__ = ["CostModel", "Metrics", "TradeResult", "evaluate", "simulate_trade", "walk_forward_splits"]
