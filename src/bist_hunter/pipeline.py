@@ -2,21 +2,25 @@
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Iterable
+
 import pandas as pd
 
 from .scoring import CandidateFeatures, score_candidate as _score_features
 
 REQUIRED_COLUMNS = ("symbol", "timestamp", "open", "high", "low", "close", "volume")
 
+
 @dataclass(frozen=True, slots=True)
 class LabelConfig:
     limit_pct: float = 0.10
     horizon_bars: int = 1
 
+
 @dataclass(frozen=True, slots=True)
 class DatasetSplit:
     train: pd.DataFrame
     test: pd.DataFrame
+
 
 @dataclass(frozen=True, slots=True)
 class CandidateEvidence:
@@ -25,6 +29,7 @@ class CandidateEvidence:
     pattern: float = 0.0
     catalyst: float = 0.0
     volume_anomaly: float = 0.0
+    flow_strength: float = 0.0
     manipulation_risk: float = 0.0
 
 
@@ -40,8 +45,11 @@ def normalize_ohlcv(rows: Iterable[dict]) -> pd.DataFrame:
         frame[col] = pd.to_numeric(frame[col], errors="raise")
     if (frame[["open", "high", "low", "close", "volume"]] < 0).any().any():
         raise ValueError("OHLCV values cannot be negative")
-    return (frame.drop_duplicates(["symbol", "timestamp"], keep="last")
-            .sort_values(["symbol", "timestamp"]).reset_index(drop=True))
+    return (
+        frame.drop_duplicates(["symbol", "timestamp"], keep="last")
+        .sort_values(["symbol", "timestamp"])
+        .reset_index(drop=True)
+    )
 
 
 def add_forward_labels(frame: pd.DataFrame, config: LabelConfig = LabelConfig()) -> pd.DataFrame:
@@ -55,7 +63,8 @@ def add_forward_labels(frame: pd.DataFrame, config: LabelConfig = LabelConfig())
 
 
 def time_split(frame: pd.DataFrame, test_start: date | datetime) -> DatasetSplit:
-    cutoff = pd.Timestamp(test_start, tz="UTC")
+    cutoff = pd.Timestamp(test_start)
+    cutoff = cutoff.tz_localize("UTC") if cutoff.tzinfo is None else cutoff.tz_convert("UTC")
     return DatasetSplit(frame[frame["timestamp"] < cutoff].copy(), frame[frame["timestamp"] >= cutoff].copy())
 
 
@@ -63,6 +72,7 @@ def score_candidate(candidate: CandidateEvidence) -> float:
     features = CandidateFeatures(
         volume_anomaly=candidate.volume_anomaly,
         price_momentum=candidate.pattern,
+        flow_strength=candidate.flow_strength,
         catalyst_strength=candidate.catalyst,
         manipulation_risk=candidate.manipulation_risk,
     )
