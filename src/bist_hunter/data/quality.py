@@ -12,7 +12,8 @@ def validate_ohlcv(frame: pd.DataFrame) -> list[str]:
         return [f"missing:{','.join(missing)}"]
     if frame[list(REQUIRED)].isna().any().any():
         errors.append("null_values")
-    if (frame[["open", "high", "low", "close", "volume"]] < 0).any().any():
+    prices = ["open", "high", "low", "close", "volume"]
+    if (frame[prices] < 0).any().any():
         errors.append("negative_values")
     if (frame["high"] < frame[["open", "close", "low"]].max(axis=1)).any():
         errors.append("high_below_ohlc")
@@ -20,7 +21,10 @@ def validate_ohlcv(frame: pd.DataFrame) -> list[str]:
         errors.append("low_above_ohlc")
     if frame.duplicated(["symbol", "timestamp"]).any():
         errors.append("duplicate_bars")
-    if not pd.DatetimeIndex(pd.to_datetime(frame["timestamp"], utc=True)).is_monotonic_increasing:
+    timestamps = pd.to_datetime(frame["timestamp"], utc=True)
+    if not frame.assign(_ts=timestamps).groupby("symbol")["_ts"].apply(
+        lambda x: x.is_monotonic_increasing
+    ).all():
         errors.append("timestamp_not_monotonic")
     return errors
 
