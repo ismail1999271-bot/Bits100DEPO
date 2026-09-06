@@ -4,7 +4,7 @@ This is a composite research indicator, not a claim that BIST has an official
 Fear & Greed index. Inputs are normalized to [-1, 1] before aggregation.
 """
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,7 +28,7 @@ def fear_greed_score(x: RegimeInputs) -> float:
         "fx_pressure": 0.10,
         "sentiment": 0.15,
     }
-    values = vars(x)
+    values = asdict(x)
     raw = sum(weights[k] * max(-1.0, min(1.0, values[k])) for k in weights)
     return round(50.0 + 50.0 * raw, 2)
 
