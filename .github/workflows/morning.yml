@@ -1,0 +1,22 @@
+name: BIST Hunter Morning
+
+on:
+  schedule:
+    - cron: '0 3 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  morning:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -e .
+      - name: Run 06:00 research job
+        env:
+          BIST_MARKET_DATA_URL: ${{ secrets.BIST_MARKET_DATA_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python -m bist_hunter
