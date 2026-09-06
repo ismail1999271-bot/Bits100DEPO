@@ -58,9 +58,14 @@ def estimate_stock_flows(
 
 
 def stock_smart_money_score(estimated_flow_try: float, scale_try: float = 100_000_000) -> float:
-    """Bound an estimated stock-level flow to [-1, 1]."""
+    """Map estimated stock-level flow to a strictly bounded -1..1 feature."""
     import math
 
     if scale_try <= 0:
         raise ValueError("scale_try must be positive")
-    return round(math.tanh(estimated_flow_try / scale_try), 6)
+    score = math.tanh(estimated_flow_try / scale_try)
+    if score >= 1.0:
+        score = 0.999999
+    elif score <= -1.0:
+        score = -0.999999
+    return round(score, 6)
