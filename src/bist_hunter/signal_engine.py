@@ -24,10 +24,6 @@ class SignalConfig:
     max_manipulation_risk: float = 0.65
 
 
-def _positive(value: float) -> float:
-    return max(0.0, min(1.0, (value + 1.0) / 2.0))
-
-
 def build_opportunity(symbol: str, features: CandidateFeatures, config: SignalConfig = SignalConfig()) -> Opportunity:
     score, reasons = score_candidate(features)
     confidence = max(0.0, min(1.0, 0.55 + 0.35 * (score / 100.0) - 0.25 * max(0.0, features.manipulation_risk)))
@@ -45,6 +41,6 @@ def rank_opportunities(items: list[tuple[str, CandidateFeatures]], config: Signa
 
 
 def tavan_probability_proxy(features: CandidateFeatures) -> float:
-    """Research-only proxy in [0,1]; not a calibrated probability."""
+    """Research-only score fraction in [0,1]; not a calibrated probability."""
     score, _ = score_candidate(features)
-    return round(_positive(score / 100.0), 4)
+    return round(score / 100.0, 4)
