@@ -1,6 +1,8 @@
 """Cost-aware, chronological backtesting primitives."""
 from dataclasses import dataclass
+
 import pandas as pd
+
 
 @dataclass(frozen=True, slots=True)
 class TradeResult:
@@ -11,19 +13,24 @@ class TradeResult:
     gross_return: float
     net_return: float
 
+
 @dataclass(frozen=True, slots=True)
 class CostModel:
     commission_bps: float = 10.0
     slippage_bps: float = 5.0
+
     @property
     def round_trip_rate(self) -> float:
         return 2 * (self.commission_bps + self.slippage_bps) / 10_000
 
+
 def simulate_trade(symbol: str, entry_price: float, exit_price: float, capital: float, costs: CostModel) -> TradeResult:
     if min(entry_price, exit_price, capital) <= 0:
         raise ValueError("prices and capital must be positive")
-    gross = exit_price / entry_price - 1
-    return TradeResult(symbol, entry_price, exit_price, capital / entry_price, gross, gross - costs.round_trip_rate)
+    gross = round(exit_price / entry_price - 1, 12)
+    net = round(gross - costs.round_trip_rate, 12)
+    return TradeResult(symbol, entry_price, exit_price, capital / entry_price, gross, net)
+
 
 @dataclass(frozen=True, slots=True)
 class Metrics:
@@ -40,6 +47,7 @@ class Metrics:
     average_daily_hits: float
     months_with_10_hits: int
     average_monthly_hits: float
+
 
 def evaluate(predictions: pd.DataFrame, threshold: float = 0.5) -> Metrics:
     required = {"timestamp", "prediction", "actual"}
@@ -61,7 +69,15 @@ def evaluate(predictions: pd.DataFrame, threshold: float = 0.5) -> Metrics:
     daily = df.groupby(df["timestamp"].dt.date)["prediction"].sum()
     hits = df[df["prediction"] & df["actual"]].assign(month=lambda x: x["timestamp"].dt.to_period("M"))
     monthly = hits.groupby("month").size()
-    return Metrics(len(df), int(df["actual"].sum()), tp, fp, fn, precision, recall, int((daily > 0).sum()), len(daily), float((daily > 0).mean()) if len(daily) else 0.0, float(daily.mean()) if len(daily) else 0.0, int((monthly >= 10).sum()) if len(monthly) else 0, float(monthly.mean()) if len(monthly) else 0.0)
+    return Metrics(
+        len(df), int(df["actual"].sum()), tp, fp, fn, precision, recall,
+        int((daily > 0).sum()), len(daily),
+        float((daily > 0).mean()) if len(daily) else 0.0,
+        float(daily.mean()) if len(daily) else 0.0,
+        int((monthly >= 10).sum()) if len(monthly) else 0,
+        float(monthly.mean()) if len(monthly) else 0.0,
+    )
+
 
 def walk_forward_splits(frame: pd.DataFrame, train_days: int = 252, test_days: int = 21):
     if train_days < 1 or test_days < 1:
