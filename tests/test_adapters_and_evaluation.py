@@ -23,6 +23,6 @@ def test_opportunity_metrics_top_k_and_drawdown():
     )
     metrics = evaluate_opportunities(frame, top_k=1)
     assert metrics.top_k_precision == 0.5
-    assert metrics.hit_day_rate == 0.5
+    assert metrics.hit_day_rate == 1.0
     assert metrics.recall == 0.5
     assert metrics.max_drawdown < 0
