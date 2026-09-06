@@ -1,20 +1,13 @@
-"""Institutional fund-flow intelligence for the daily opportunity engine.
-
-The module is provider-neutral: it accepts normalized daily fund flows and does
-not pretend that a live feed exists. It turns fund inflow/outflow into a
-repeatable feature that can later be joined with BIST symbols, news and social
-signals.
-"""
+"""Institutional fund-flow intelligence for the daily opportunity engine."""
 
 from dataclasses import dataclass
 from datetime import date
 from typing import Iterable
+import math
 
 
 @dataclass(frozen=True, slots=True)
 class FundFlow:
-    """One fund's daily net money flow, in TRY."""
-
     as_of: date
     fund_code: str
     fund_name: str
@@ -46,25 +39,22 @@ def summarize_fund_flows(flows: Iterable[FundFlow], as_of: date | None = None) -
         rows = [row for row in rows if row.as_of == as_of]
     if not rows:
         raise ValueError("no fund-flow observations")
-
     day = as_of or max(row.as_of for row in rows)
     rows = [row for row in rows if row.as_of == day]
     inflows = sorted((r for r in rows if r.net_flow_try > 0), key=lambda r: r.net_flow_try, reverse=True)
     outflows = sorted((r for r in rows if r.net_flow_try < 0), key=lambda r: r.net_flow_try)
     return FundFlowSummary(
-        as_of=day,
-        total_inflow_try=round(sum(r.net_flow_try for r in inflows), 2),
-        total_outflow_try=round(abs(sum(r.net_flow_try for r in outflows)), 2),
-        net_flow_try=round(sum(r.net_flow_try for r in rows), 2),
-        inflow_funds=tuple(r.fund_code for r in inflows),
-        outflow_funds=tuple(r.fund_code for r in outflows),
+        day,
+        round(sum(r.net_flow_try for r in inflows), 2),
+        round(abs(sum(r.net_flow_try for r in outflows)), 2),
+        round(sum(r.net_flow_try for r in rows), 2),
+        tuple(r.fund_code for r in inflows),
+        tuple(r.fund_code for r in outflows),
     )
 
 
 def smart_money_score(net_flow_try: float, scale_try: float = 1_000_000_000) -> float:
-    """Map net fund flow to a strictly bounded -1..1 feature for model input."""
-    import math
-
+    """Map net fund flow to a bounded open interval (-1, 1)."""
     if scale_try <= 0:
         raise ValueError("scale_try must be positive")
     score = math.tanh(net_flow_try / scale_try)
@@ -72,4 +62,4 @@ def smart_money_score(net_flow_try: float, scale_try: float = 1_000_000_000) -> 
         score = 0.999999
     elif score <= -1.0:
         score = -0.999999
-    return round(score, 6)
+    return score
