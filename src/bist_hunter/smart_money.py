@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from datetime import date
 from typing import Iterable
+import math
 
 from .fund_flow import FundFlow
 
@@ -27,16 +28,8 @@ class StockMoneyFlow:
 
 
 def estimate_stock_flows(
-    flows: Iterable[FundFlow],
-    holdings: Iterable[FundHolding],
-    as_of: date | None = None,
+    flows: Iterable[FundFlow], holdings: Iterable[FundHolding], as_of: date | None = None
 ) -> list[StockMoneyFlow]:
-    """Allocate each fund's net flow across its reported holdings.
-
-    This is an exposure proxy, not a claim that the fund bought/sold each stock
-    by the allocated amount. It becomes meaningful only when holdings and flows
-    share the same observation date.
-    """
     flow_rows = list(flows)
     holding_rows = list(holdings)
     if not flow_rows or not holding_rows:
@@ -52,15 +45,12 @@ def estimate_stock_flows(
         totals[holding.symbol] = totals.get(holding.symbol, 0.0) + flow
         funds.setdefault(holding.symbol, set()).add(holding.fund_code)
     return [
-        StockMoneyFlow(symbol=symbol, estimated_flow_try=round(total, 2), contributing_funds=tuple(sorted(funds[symbol])))
+        StockMoneyFlow(symbol, round(total, 2), tuple(sorted(funds[symbol])))
         for symbol, total in sorted(totals.items(), key=lambda item: item[1], reverse=True)
     ]
 
 
 def stock_smart_money_score(estimated_flow_try: float, scale_try: float = 100_000_000) -> float:
-    """Map estimated stock-level flow to a strictly bounded -1..1 feature."""
-    import math
-
     if scale_try <= 0:
         raise ValueError("scale_try must be positive")
     score = math.tanh(estimated_flow_try / scale_try)
@@ -68,4 +58,4 @@ def stock_smart_money_score(estimated_flow_try: float, scale_try: float = 100_00
         score = 0.999999
     elif score <= -1.0:
         score = -0.999999
-    return round(score, 6)
+    return score
