@@ -5,4 +5,4 @@ def test_intraday_state_machine():
     assert decide(MonitorInput(90, 90, 0.03)) == "HOLD"
     assert decide(MonitorInput(90, 50, 0.01)) == "EXIT"
     assert decide(MonitorInput(90, 80, -0.04)) == "EXIT"
-    assert decide(MonitorInput(90, 70, 0.01)) == "CANCEL"
+    assert decide(MonitorInput(90, 75, 0.01)) == "CANCEL"
