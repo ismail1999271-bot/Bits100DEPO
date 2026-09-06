@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from datetime import date
 from typing import Iterable
 
+from ..fund_flow import FundFlow
 from .schema import NormalizedBar, NormalizedNews
 
 
@@ -23,6 +24,16 @@ class NewsProvider(ABC):
         raise NotImplementedError
 
 
+class FundFlowProvider(ABC):
+    """Provider contract for normalized daily fund inflow/outflow data."""
+
+    name = "abstract"
+
+    @abstractmethod
+    def fund_flows(self, start: date, end: date) -> list[FundFlow]:
+        raise NotImplementedError
+
+
 class KapProvider(NewsProvider):
     """KAP is treated as a first-party disclosure source.
 
@@ -39,4 +50,18 @@ class KapProvider(NewsProvider):
     def news(self, start: date, end: date) -> list[NormalizedNews]:
         if self.fetcher is None:
             raise RuntimeError("KAP fetcher is not configured")
+        return list(self.fetcher(start, end))
+
+
+class InjectedFundFlowProvider(FundFlowProvider):
+    """Small adapter for tests and future licensed/public data connectors."""
+
+    name = "injected"
+
+    def __init__(self, fetcher=None):
+        self.fetcher = fetcher
+
+    def fund_flows(self, start: date, end: date) -> list[FundFlow]:
+        if self.fetcher is None:
+            raise RuntimeError("fund-flow fetcher is not configured")
         return list(self.fetcher(start, end))
