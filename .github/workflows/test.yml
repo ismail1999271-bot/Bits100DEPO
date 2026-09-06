@@ -21,3 +21,5 @@ jobs:
         run: pytest -q
       - name: Ruff
         run: ruff check .
+      - name: Production guard
+        run: python -c "from bist_hunter.paper_trading import PaperBroker; print('paper-trading guard OK')"
