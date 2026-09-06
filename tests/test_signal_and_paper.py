@@ -4,8 +4,14 @@ from bist_hunter.signal_engine import SignalConfig, build_opportunity, rank_oppo
 
 
 def test_quality_gate_allows_strong_and_rejects_risky():
-    strong = CandidateFeatures(volume_anomaly=1, price_momentum=1, flow_strength=1, catalyst_strength=1)
-    risky = CandidateFeatures(volume_anomaly=1, price_momentum=1, flow_strength=1, catalyst_strength=1, manipulation_risk=1)
+    strong = CandidateFeatures(
+        volume_anomaly=1, price_momentum=1, flow_strength=1, catalyst_strength=1,
+        sector_strength=1, orderbook_strength=1, social_attention=1,
+    )
+    risky = CandidateFeatures(
+        volume_anomaly=1, price_momentum=1, flow_strength=1, catalyst_strength=1,
+        sector_strength=1, orderbook_strength=1, social_attention=1, manipulation_risk=1,
+    )
     assert build_opportunity("AAA", strong, SignalConfig(min_score=70)).quality
     assert not build_opportunity("BBB", risky, SignalConfig(max_manipulation_risk=0.65)).quality
 
