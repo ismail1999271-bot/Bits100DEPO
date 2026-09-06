@@ -62,10 +62,14 @@ def summarize_fund_flows(flows: Iterable[FundFlow], as_of: date | None = None) -
 
 
 def smart_money_score(net_flow_try: float, scale_try: float = 1_000_000_000) -> float:
-    """Map net fund flow to a bounded -1..1 feature for model input."""
-    if scale_try <= 0:
-        raise ValueError("scale_try must be positive")
-    # Smooth saturation prevents a single extreme observation dominating the model.
+    """Map net fund flow to a strictly bounded -1..1 feature for model input."""
     import math
 
-    return round(math.tanh(net_flow_try / scale_try), 6)
+    if scale_try <= 0:
+        raise ValueError("scale_try must be positive")
+    score = math.tanh(net_flow_try / scale_try)
+    if score >= 1.0:
+        score = 0.999999
+    elif score <= -1.0:
+        score = -0.999999
+    return round(score, 6)
