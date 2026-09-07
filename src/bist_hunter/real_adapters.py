@@ -1,9 +1,4 @@
-"""Concrete internet-backed adapters.
-
-Market data uses Yahoo Finance chart responses as a no-key fallback. KAP and
-institutional/fund feeds remain credential/contract driven because licensed
-feeds must not be faked or scraped as if they were official APIs.
-"""
+"""Concrete internet-backed adapters with fail-closed source contracts."""
 from __future__ import annotations
 
 import json
@@ -16,7 +11,7 @@ from urllib.request import Request, urlopen
 from .adapters import ProviderError, parse_json_records
 
 
-def _get(url: str, headers: dict[str, str] | None = None, timeout: float = 15.0) -> bytes:
+def _get(url: str, headers: dict[str, str] | None = None, timeout: float = 20.0) -> bytes:
     request = Request(url, headers=headers or {"User-Agent": "Bits100DEPO/1.0"})
     try:
         with urlopen(request, timeout=timeout) as response:
@@ -26,11 +21,12 @@ def _get(url: str, headers: dict[str, str] | None = None, timeout: float = 15.0)
 
 
 def yahoo_chart(symbol: str, start: date, end: date) -> list[dict[str, object]]:
-    """Return daily OHLCV for a BIST ticker using Yahoo's public chart API."""
     ticker = symbol if symbol.endswith(".IS") else f"{symbol}.IS"
-    params = urlencode({"period1": int(datetime.combine(start, datetime.min.time(), UTC).timestamp()),
-                        "period2": int(datetime.combine(end + timedelta(days=1), datetime.min.time(), UTC).timestamp()),
-                        "interval": "1d", "events": "history", "includeAdjustedClose": "true"})
+    params = urlencode({
+        "period1": int(datetime.combine(start, datetime.min.time(), UTC).timestamp()),
+        "period2": int(datetime.combine(end + timedelta(days=1), datetime.min.time(), UTC).timestamp()),
+        "interval": "1d", "events": "history", "includeAdjustedClose": "true",
+    })
     payload = json.loads(_get(f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?{params}").decode())
     result = payload.get("chart", {}).get("result")
     if not result:
@@ -46,55 +42,78 @@ def yahoo_chart(symbol: str, start: date, end: date) -> list[dict[str, object]]:
     return rows
 
 
-def load_symbol_universe() -> list[str]:
-    """Load the complete eligible universe from the configured provider."""
-    raw = os.getenv("BIST_SYMBOLS", "")
-    symbols = [item.strip().upper() for item in raw.split(",") if item.strip()]
-    if not symbols:
-        raise ProviderError("BIST_SYMBOLS is not configured; refusing to scan a partial universe")
-    return list(dict.fromkeys(symbols))
-
-
-def fetch_json_endpoint(endpoint: str, token_env: str | None = None) -> list[dict[str, object]]:
-    headers = {"User-Agent": "Bits100DEPO/1.0"}
+def _records_from_endpoint(endpoint: str, token_env: str | None = None, params: dict[str, str] | None = None) -> list[dict[str, object]]:
+    headers = {"User-Agent": "Bits100DEPO/1.0", "Accept": "application/json"}
     if token_env:
         token = os.getenv(token_env, "")
         if not token:
             raise ProviderError(f"{token_env} is not configured")
         headers["Authorization"] = f"Bearer {token}"
-    return parse_json_records(json.loads(_get(endpoint, headers).decode("utf-8")))
+        headers["X-API-KEY"] = token
+    url = endpoint
+    if params:
+        url += ("&" if "?" in url else "?") + urlencode(params)
+    try:
+        return parse_json_records(json.loads(_get(url, headers).decode("utf-8")))
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise ProviderError(f"endpoint did not return valid JSON: {exc}") from exc
+
+
+def load_symbol_universe() -> list[str]:
+    """Load the complete eligible universe; refuse partial hard-coded universes."""
+    endpoint = os.getenv("BIST_UNIVERSE_URL", "")
+    if endpoint:
+        rows = _records_from_endpoint(endpoint, "BIST_DATA_API_KEY")
+        symbols = [str(row.get("symbol", row.get("code", row.get("ticker", "")))).upper().strip().removesuffix(".IS") for row in rows]
+        symbols = list(dict.fromkeys(symbol for symbol in symbols if symbol))
+        if not symbols:
+            raise ProviderError("BIST_UNIVERSE_URL returned an empty universe")
+        return symbols
+    raw = os.getenv("BIST_SYMBOLS", "")
+    symbols = list(dict.fromkeys(item.strip().upper().removesuffix(".IS") for item in raw.split(",") if item.strip()))
+    if not symbols:
+        raise ProviderError("BIST_UNIVERSE_URL/BIST_SYMBOLS is not configured; refusing to scan a partial universe")
+    return symbols
+
+
+def fetch_json_endpoint(endpoint: str, token_env: str | None = None) -> list[dict[str, object]]:
+    return _records_from_endpoint(endpoint, token_env)
 
 
 def fetch_kap_disclosures(start: date, end: date) -> list[dict[str, object]]:
     endpoint = os.getenv("KAP_API_URL", "")
     if not endpoint:
         raise ProviderError("KAP_API_URL is not configured")
-    query = urlencode({"start": start.isoformat(), "end": end.isoformat()})
-    return fetch_json_endpoint(f"{endpoint}?{query}", "KAP_API_KEY")
+    rows = _records_from_endpoint(endpoint, "KAP_API_KEY", {"start": start.isoformat(), "end": end.isoformat()})
+    return [{
+        "symbol": str(row.get("symbol", row.get("stockCode", row.get("memberCode", "")))).upper(),
+        "title": str(row.get("title", row.get("subject", ""))),
+        "text": str(row.get("text", row.get("summary", ""))),
+        "published_at": row.get("published_at", row.get("publishDate")),
+        "source_id": row.get("id", row.get("disclosureId")),
+    } for row in rows]
 
 
 def fetch_news_rss(url: str) -> list[dict[str, object]]:
     root = ET.fromstring(_get(url))
-    return [{
-        "source": "rss",
-        "title": (item.findtext("title") or "").strip(),
-        "url": (item.findtext("link") or "").strip(),
-        "published_at": (item.findtext("pubDate") or "").strip(),
-    } for item in root.findall(".//item")]
+    return [{"source": "rss", "title": (item.findtext("title") or "").strip(), "url": (item.findtext("link") or "").strip(), "published_at": (item.findtext("pubDate") or "").strip()} for item in root.findall(".//item")]
 
 
 def fetch_fund_flow(start: date, end: date) -> list[dict[str, object]]:
     endpoint = os.getenv("FUND_FLOW_API_URL", "")
     if not endpoint:
         raise ProviderError("FUND_FLOW_API_URL is not configured")
-    query = urlencode({"start": start.isoformat(), "end": end.isoformat()})
-    return fetch_json_endpoint(f"{endpoint}?{query}", "FUND_FLOW_API_KEY")
+    rows = _records_from_endpoint(endpoint, "FUND_FLOW_API_KEY", {"start": start.isoformat(), "end": end.isoformat()})
+    return [{
+        "symbol": str(row.get("symbol", row.get("stockCode", row.get("ticker", "")))).upper(),
+        "score": row.get("score"), "net_flow": row.get("net_flow", row.get("netFlow", 0)),
+        "source_id": row.get("id", row.get("fundId")),
+    } for row in rows]
 
 
 def source_healthcheck() -> dict[str, bool]:
-    """Expose configuration health without making a network call."""
     return {
-        "market": bool(os.getenv("BIST_SYMBOLS")),
+        "market": bool(os.getenv("BIST_UNIVERSE_URL") or os.getenv("BIST_SYMBOLS")),
         "kap": bool(os.getenv("KAP_API_URL") and os.getenv("KAP_API_KEY")),
         "fund_flow": bool(os.getenv("FUND_FLOW_API_URL") and os.getenv("FUND_FLOW_API_KEY")),
         "news_rss": bool(os.getenv("NEWS_RSS_URL")),
