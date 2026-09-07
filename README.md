@@ -20,15 +20,32 @@ Ana hedef, geçmiş BIST tavan olaylarının ortak özelliklerini veriyle keşfe
 8. Sosyal sentiment ve kaynak güvenilirliği
 9. ML ranking
 10. Telegram 06:00 raporu ve canlı pozisyon izleme
+11. Performans leaderboard'u: 1 gün / 5 gün / aylık momentum ve sıralama değişimi
+
+## Performans leaderboard'u
+
+Sosyal medyada görülen “ayın en çok kazandıran hisseleri” formatı projeye **tanımlayıcı bir veri katmanı** olarak eklenmiştir. `performance_board.py` ile:
+
+- BIST evrenindeki hisseler trailing dönem getirisine göre sıralanır.
+- 20 işlem günü, aylık performans için pratik varsayılan dönemdir.
+- Önceki döneme göre getiri ivmesi (`acceleration_pct`) hesaplanır.
+- Önceki leaderboard sırasına göre yükseliş/düşüş (`rank_change`) izlenir.
+- Yeterli geçmişi olmayan hisseler otomatik dışarıda bırakılır.
+- Bu tablo tek başına al/sat sinyali değildir; sinyal motoruna momentum bağlamı sağlamak için kullanılır.
+
+Bu katman ileride günlük 06:00 raporunda şu formatta kullanılabilir: **Performans Liderleri → Yeni Yükselenler → Momentum İvmesi → Haber/KAP Katalizörü → Smart Money → Tavan Skoru**.
 
 ## Temel KPI'lar
 
-- Aylık 10+ yüksek kaliteli tavan fırsatını önceden yakalama kapasitesi
-- Precision / recall
-- Sinyalin tavan öncesi lead time'ı
-- Net getiri ve expectancy
+- Daily Hit-Day Rate: güçlü yükseliş/tavan olayının doğru yakalandığı gün oranı
+- Top-K Precision (özellikle Top-5 / Top-20)
+- Strong-upside / tavan Recall
+- Sinyalin olay öncesi lead time'ı
+- Net getiri, expectancy ve P&L
 - Maksimum drawdown
-- İşlem maliyeti ve slippage sonrası performans
+- Komisyon, spread, slippage ve likidite sonrası performans
+
+Sistem kaliteli fırsat yoksa zorla hisse seçmez ve `NO_QUALITY_SIGNAL` döndürebilir.
 
 ## Güvenlik
 
