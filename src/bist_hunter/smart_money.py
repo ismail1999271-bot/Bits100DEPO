@@ -14,6 +14,7 @@ class FundHolding:
     fund_code: str
     symbol: str
     portfolio_weight: float
+    sector: str | None = None
 
     def __post_init__(self) -> None:
         if not 0 <= self.portfolio_weight <= 1:
@@ -27,9 +28,22 @@ class StockMoneyFlow:
     contributing_funds: tuple[str, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class SectorMoneyFlow:
+    sector: str
+    estimated_flow_try: float
+    contributing_funds: tuple[str, ...]
+
+
 def estimate_stock_flows(
     flows: Iterable[FundFlow], holdings: Iterable[FundHolding], as_of: date | None = None
 ) -> list[StockMoneyFlow]:
+    """Allocate each fund's net flow across its latest known holdings.
+
+    This is an exposure estimate, not an assertion that the fund traded every
+    holding in proportion to its portfolio weight. The caller should therefore
+    use it as a Smart Money feature rather than as a transaction ledger.
+    """
     flow_rows = list(flows)
     holding_rows = list(holdings)
     if not flow_rows or not holding_rows:
@@ -47,6 +61,30 @@ def estimate_stock_flows(
     return [
         StockMoneyFlow(symbol, round(total, 2), tuple(sorted(funds[symbol])))
         for symbol, total in sorted(totals.items(), key=lambda item: item[1], reverse=True)
+    ]
+
+
+def estimate_sector_flows(
+    flows: Iterable[FundFlow], holdings: Iterable[FundHolding], as_of: date | None = None
+) -> list[SectorMoneyFlow]:
+    """Estimate sector-level institutional flow from fund holdings."""
+    flow_rows = list(flows)
+    holding_rows = list(holdings)
+    if not flow_rows or not holding_rows:
+        raise ValueError("flows and holdings are required")
+    day = as_of or max(max(f.as_of for f in flow_rows), max(h.as_of for h in holding_rows))
+    flow_map = {f.fund_code: f for f in flow_rows if f.as_of == day}
+    totals: dict[str, float] = {}
+    funds: dict[str, set[str]] = {}
+    for holding in holding_rows:
+        if holding.as_of != day or not holding.sector or holding.fund_code not in flow_map:
+            continue
+        flow = flow_map[holding.fund_code].net_flow_try * holding.portfolio_weight
+        totals[holding.sector] = totals.get(holding.sector, 0.0) + flow
+        funds.setdefault(holding.sector, set()).add(holding.fund_code)
+    return [
+        SectorMoneyFlow(sector, round(total, 2), tuple(sorted(funds[sector])))
+        for sector, total in sorted(totals.items(), key=lambda item: item[1], reverse=True)
     ]
 
 
