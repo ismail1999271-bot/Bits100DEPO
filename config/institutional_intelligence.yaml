@@ -1,12 +1,17 @@
 # Institutional research layer. These are capabilities/contracts, not claims of licensed feeds.
 # Connectors must provide point-in-time observations and preserve source timestamps.
-version: 1
+version: 2
 weights:
   market: 0.50
   smart_money: 0.20
   consensus: 0.10
   research: 0.10
   fundamentals: 0.10
+technical_watchlist:
+  enabled: true
+  score_weight: 0.10
+  minimum_risk_reward: 1.0
+  required_levels: [last_price, entry_low, entry_high, target, stop]
 
 source_families:
   market:
@@ -20,6 +25,7 @@ source_families:
     - earnings_transcripts
     - broker_research
     - expert_network
+    - technical_watchlists
   fundamentals:
     - financial_statements
     - valuation
@@ -68,6 +74,11 @@ outputs:
   - analyst_revision_score
   - research_score
   - fundamental_score
+  - technical_watch_score
+  - target_upside_pct
+  - stop_downside_pct
+  - risk_reward
+  - technical_risk_gate
   - estimated_exposure_try
   - concentration_risk
   - evidence_chain
