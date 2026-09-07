@@ -12,7 +12,7 @@ def test_openai_runtime_fails_closed_without_key(monkeypatch):
 
 
 def test_openai_runtime_rejects_invalid_reasoning():
-    with pytest.raises(RuntimeError):
+    with pytest.raises(ValueError, match="reasoning_effort"):
         run_openai_research("test", api_key="dummy", reasoning_effort="none")
 
 
