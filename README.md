@@ -22,6 +22,7 @@ Ana hedef, geçmiş BIST tavan olaylarının ortak özelliklerini veriyle keşfe
 10. Telegram 06:00 raporu ve canlı pozisyon izleme
 11. Performans leaderboard'u: 1 gün / 5 gün / aylık momentum ve sıralama değişimi
 12. TEFAS/fon akışı → Smart Money katmanı
+13. **Institutional Consensus: büyük portföy yönetim şirketleri arasında ortak hisse yoğunlaşması**
 
 ## Fon akışı / Smart Money katmanı
 
@@ -36,6 +37,24 @@ Ana hedef, geçmiş BIST tavan olaylarının ortak özelliklerini veriyle keşfe
 - Bu hesap gerçek işlem defteri değildir; fon girişinin portföy ağırlıklarıyla oransal dağıtıldığı bir exposure estimate'tir.
 
 Veri kaynağı adapter'ları TEFAS/KAP/vendor verisini bu normalize modele dönüştürür. Canlı veri yokmuş gibi davranılmaz ve portföy tarihleri ile günlük akış tarihleri aynı değilse bu zaman farkı korunur.
+
+## Institutional Consensus / Kurumsal Ortaklaşma
+
+`institutional_consensus.py`, TEFAS'tan bağımsız ikinci bir Smart Money katmanıdır. Amaç, büyük portföy yönetim şirketlerinin aynı BIST hisselerinde ortaklaşmasını ölçmektir.
+
+İzlenecek ana kurum evreni: Ak, İş, Yapı Kredi, Garanti, QNB, TEB, Deniz, Oyak, Ünlü, Tacirler, İnfo, Tera, Pusula, Ata, Azimut ve Albaraka Portföy.
+
+Temel kurallar:
+
+- Aynı şirketin birden fazla fonu **tek kurumsal yönetici** olarak sayılır; `manager_count` ile `fund_count` ayrı tutulur.
+- KAP/portföy raporundaki ağırlıklar pozisyon snapshot'ıdır; günlük trade ledger değildir.
+- AUM mevcutsa `fon AUM × portföy ağırlığı` ile tahmini pozisyon değeri hesaplanır; AUM yoksa veri uydurulmaz.
+- `NEW`, `INCREASE`, `DECREASE`, `EXIT`, `STABLE` pozisyon değişimleri izlenir.
+- Kurumsal konsensüs skoru 0–100 arasında; kurum genişliği, pozisyon ağırlığı, değişim, veri tazeliği ve yeni girişleri birleştirir.
+- Veri tarihi `as_of` olarak korunur; ileri tarih/lookahead kullanılmaz.
+- `consensus_map()` ranking motoruna doğrudan 0–100 skor sözlüğü üretir.
+
+Bu katman ileride TEFAS flow + broker flow + fiyat/hacim + KAP katalizörü ile tek Smart Money Composite içinde birleştirilecektir.
 
 ## Performans leaderboard'u
 
@@ -60,6 +79,7 @@ Bu katman günlük 06:00 raporunda şu formatta kullanılabilir: **Performans Li
 - Maksimum drawdown
 - Komisyon, spread, slippage ve likidite sonrası performans
 - Smart Money katkısı: pozitif/negatif fon akışı ayrışmasının sinyal precision ve lead time üzerindeki etkisi
+- Institutional Consensus katkısı: kurum genişliği ve pozisyon artışlarının precision/lead time üzerindeki etkisi
 
 Sistem kaliteli fırsat yoksa zorla hisse seçmez ve `NO_QUALITY_SIGNAL` döndürebilir.
 
