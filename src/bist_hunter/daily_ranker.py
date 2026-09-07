@@ -56,19 +56,26 @@ def rank_latest(frame: pd.DataFrame, config: RankingConfig = RankingConfig()) ->
         latest["institutional_data_coverage"] = 0.0
         score_column = "score"
 
-    watchlist_columns = {"entry_low", "entry_high", "target", "stop", "last_price"}
-    if watchlist_columns.issubset(latest.columns):
-        latest = add_risk_reward(latest)
-        latest["institutional_score"] = (
-            (1 - config.technical_weight) * latest["institutional_score"]
-            + config.technical_weight * latest["technical_watch_score"]
-        ).round(2)
-        latest["technical_risk_gate"] = latest["risk_reward"] >= 1.0
-        latest = latest[latest["technical_risk_gate"]]
-        score_column = "institutional_score"
-    else:
+    watchlist_columns = ["entry_low", "entry_high", "target", "stop", "last_price"]
+    if set(watchlist_columns).issubset(latest.columns):
+        complete = latest[watchlist_columns].notna().all(axis=1)
         latest["technical_watch_score"] = pd.NA
         latest["technical_risk_gate"] = pd.NA
+        latest.loc[complete, "technical_watch_score"] = add_risk_reward(
+            latest.loc[complete, ["symbol", *watchlist_columns]]
+        )["technical_watch_score"].to_numpy()
+        technical = add_risk_reward(latest.loc[complete, ["symbol", *watchlist_columns]])
+        latest.loc[complete, "target_upside_pct"] = technical["target_upside_pct"].to_numpy()
+        latest.loc[complete, "stop_downside_pct"] = technical["stop_downside_pct"].to_numpy()
+        latest.loc[complete, "risk_reward"] = technical["risk_reward"].to_numpy()
+        latest.loc[complete, "technical_risk_gate"] = technical["risk_reward"].ge(1.0).to_numpy()
+        eligible = complete & latest["technical_risk_gate"].fillna(False)
+        latest.loc[eligible, "institutional_score"] = (
+            (1 - config.technical_weight) * latest.loc[eligible, "institutional_score"]
+            + config.technical_weight * pd.to_numeric(latest.loc[eligible, "technical_watch_score"])
+        ).round(2)
+        latest = latest[~complete | eligible]
+        score_column = "institutional_score"
 
     return (
         latest[latest[score_column] >= config.min_score]
