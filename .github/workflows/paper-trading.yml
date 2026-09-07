@@ -1,0 +1,28 @@
+name: BIST Hunter Paper Trading
+
+on:
+  schedule:
+    - cron: '0 * * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  paper:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -e .
+      - name: Mark to market paper portfolio
+        env:
+          BIST_SYMBOLS: ${{ secrets.BIST_SYMBOLS }}
+          PAPER_INITIAL_EQUITY_TRY: ${{ secrets.PAPER_INITIAL_EQUITY_TRY }}
+          PAPER_DATA_PATH: data/paper_performance.jsonl
+          PAPER_STATE_PATH: data/paper_state.json
+        run: |
+          if [ -z "$BIST_SYMBOLS" ]; then
+            echo 'BIST_SYMBOLS is not configured; paper trading remains safely idle.'
+            exit 0
+          fi
+          python -c "from bist_hunter.paper_runner import run_paper_session; print(run_paper_session())"
