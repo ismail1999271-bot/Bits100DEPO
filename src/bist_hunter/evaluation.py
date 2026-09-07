@@ -34,12 +34,18 @@ def evaluate_opportunities(
     event_total = int(df["event"].sum())
     top_k_precision = tp / selected_events if selected_events else 0.0
     recall = tp / event_total if event_total else 0.0
-    day_hits = selected.groupby("timestamp")["event"].any()
-    total_days = df["timestamp"].nunique()
-    hit_day_rate = float(day_hits.mean()) if total_days else 0.0
-    event_rows = df[df["event"]]
+    # Hit-day rate answers a different question from Top-K precision: on what
+    # fraction of trading days did the universe contain a target event?
+    # This remains independent of the chosen K and is useful for signal
+    # availability diagnostics.
+    day_hits = df.groupby("timestamp")["event"].any()
+    hit_day_rate = float(day_hits.mean()) if len(day_hits) else 0.0
     first_hit = selected[selected["event"]].groupby("timestamp").size()
-    mean_lead_days = float(first_hit.index.to_series().diff().dt.total_seconds().dropna().mean() / 86400) if len(first_hit) > 1 else 0.0
+    mean_lead_days = (
+        float(first_hit.index.to_series().diff().dt.total_seconds().dropna().mean() / 86400)
+        if len(first_hit) > 1
+        else 0.0
+    )
     daily_pnl = selected.groupby("timestamp")["future_return"].mean().fillna(0.0)
     equity = (1.0 + daily_pnl).cumprod()
     drawdown = equity / equity.cummax() - 1.0
