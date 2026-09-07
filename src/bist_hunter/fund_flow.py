@@ -63,7 +63,11 @@ def summarize_fund_flows(flows: Iterable[FundFlow], as_of: date | None = None) -
         raise ValueError("no fund-flow observations")
     day = as_of or max(row.as_of for row in rows)
     rows = [row for row in rows if row.as_of == day]
-    inflows = sorted((r for r in rows if r.net_flow_try > 0), key=lambda r: r.net_flow_try, reverse=True)
+    inflows = sorted(
+        (r for r in rows if r.net_flow_try > 0),
+        key=lambda r: r.net_flow_try,
+        reverse=True,
+    )
     outflows = sorted((r for r in rows if r.net_flow_try < 0), key=lambda r: r.net_flow_try)
     return FundFlowSummary(
         day,
@@ -106,8 +110,17 @@ def detect_flow_anomalies(
             mean = sum(history) / len(history)
             variance = sum((value - mean) ** 2 for value in history) / len(history)
             std = math.sqrt(variance)
-            z = 0.0 if std == 0 else (row.net_flow_try - mean) / std
-            result.append(FundFlowAnomaly(fund_code, row.as_of, row.net_flow_try, z, abs(z) >= z_threshold))
+            if std == 0:
+                if row.net_flow_try == mean:
+                    z = 0.0
+                    anomalous = False
+                else:
+                    z = math.copysign(math.inf, row.net_flow_try - mean)
+                    anomalous = True
+            else:
+                z = (row.net_flow_try - mean) / std
+                anomalous = abs(z) >= z_threshold
+            result.append(FundFlowAnomaly(fund_code, row.as_of, row.net_flow_try, z, anomalous))
     return sorted(result, key=lambda r: (r.as_of, r.fund_code))
 
 
