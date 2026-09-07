@@ -4,13 +4,19 @@ from dataclasses import dataclass
 import pandas as pd
 
 from .institutional_intelligence import InstitutionalWeights, build_institutional_score
+from .technical_watchlist import add_risk_reward
 
 
 @dataclass(frozen=True, slots=True)
 class RankingConfig:
     min_score: float = 65.0
     top_k: int = 20
+    technical_weight: float = 0.10
     institutional_weights: InstitutionalWeights = InstitutionalWeights()
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.technical_weight <= 1:
+            raise ValueError("technical_weight must be between 0 and 1")
 
 
 def add_features(frame: pd.DataFrame) -> pd.DataFrame:
@@ -33,12 +39,7 @@ def add_features(frame: pd.DataFrame) -> pd.DataFrame:
 
 
 def rank_latest(frame: pd.DataFrame, config: RankingConfig = RankingConfig()) -> pd.DataFrame:
-    """Rank the latest observation per symbol.
-
-    The institutional layer is activated only when at least one institutional feature column is
-    supplied. This preserves the historical OHLCV ranking for existing data pipelines while
-    allowing Smart Money, consensus, research and fundamental feeds to be rolled in incrementally.
-    """
+    """Rank latest observations and optionally incorporate broker technical risk/reward data."""
     enriched = add_features(frame)
     latest = enriched.sort_values("timestamp").groupby("symbol", as_index=False).tail(1)
     institutional_columns = {
@@ -54,6 +55,21 @@ def rank_latest(frame: pd.DataFrame, config: RankingConfig = RankingConfig()) ->
         latest["institutional_score"] = latest["score"]
         latest["institutional_data_coverage"] = 0.0
         score_column = "score"
+
+    watchlist_columns = {"entry_low", "entry_high", "target", "stop", "last_price"}
+    if watchlist_columns.issubset(latest.columns):
+        latest = add_risk_reward(latest)
+        latest["institutional_score"] = (
+            (1 - config.technical_weight) * latest["institutional_score"]
+            + config.technical_weight * latest["technical_watch_score"]
+        ).round(2)
+        latest["technical_risk_gate"] = latest["risk_reward"] >= 1.0
+        latest = latest[latest["technical_risk_gate"]]
+        score_column = "institutional_score"
+    else:
+        latest["technical_watch_score"] = pd.NA
+        latest["technical_risk_gate"] = pd.NA
+
     return (
         latest[latest[score_column] >= config.min_score]
         .sort_values(score_column, ascending=False)
