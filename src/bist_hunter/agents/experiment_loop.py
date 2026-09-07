@@ -1,12 +1,12 @@
 """Executable Scout/Quant/Audit -> backtest research loop."""
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 import pandas as pd
 
-from .quant_researcher import ExperimentSpec, QuantResearcher
+from .quant_researcher import ExperimentSpec
 from .research_orchestrator import ResearchLoop
 
 
