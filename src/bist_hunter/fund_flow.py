@@ -82,43 +82,42 @@ def detect_flow_anomalies(
 ) -> list[FundFlowAnomaly]:
     """Flag fund-day flows that are unusually large for that fund.
 
-    The current observation is compared only with *previous* observations,
-    preventing the anomaly threshold from being contaminated by today's flow.
-    Population standard deviation is used for deterministic behavior on short
-    histories. A zero-variance history is considered non-anomalous unless the
-    new value differs from the historical mean.
+    Each fund is evaluated independently and today's value is compared only
+    with that fund's preceding observations, avoiding cross-fund contamination
+    and look-ahead bias.
     """
     if lookback < 2:
         raise ValueError("lookback must be at least 2")
     if z_threshold <= 0:
         raise ValueError("z_threshold must be positive")
 
-    rows = sorted(flows, key=lambda r: (r.fund_code, r.as_of))
+    grouped: dict[str, list[FundFlow]] = {}
+    for row in flows:
+        grouped.setdefault(row.fund_code, []).append(row)
+
     result: list[FundFlowAnomaly] = []
-    for index, row in enumerate(rows):
-        history = [
-            r.net_flow_try
-            for r in rows[max(0, index - lookback):index]
-            if r.fund_code == row.fund_code
-        ]
-        if len(history) < 2:
-            result.append(FundFlowAnomaly(row.fund_code, row.as_of, row.net_flow_try, 0.0, False))
-            continue
-        mean = sum(history) / len(history)
-        variance = sum((value - mean) ** 2 for value in history) / len(history)
-        std = math.sqrt(variance)
-        z = 0.0 if std == 0 else (row.net_flow_try - mean) / std
-        result.append(FundFlowAnomaly(row.fund_code, row.as_of, row.net_flow_try, z, abs(z) >= z_threshold))
-    return result
+    for fund_code, fund_rows in grouped.items():
+        fund_rows.sort(key=lambda r: r.as_of)
+        for index, row in enumerate(fund_rows):
+            history = [r.net_flow_try for r in fund_rows[max(0, index - lookback):index]]
+            if len(history) < 2:
+                result.append(FundFlowAnomaly(fund_code, row.as_of, row.net_flow_try, 0.0, False))
+                continue
+            mean = sum(history) / len(history)
+            variance = sum((value - mean) ** 2 for value in history) / len(history)
+            std = math.sqrt(variance)
+            z = 0.0 if std == 0 else (row.net_flow_try - mean) / std
+            result.append(FundFlowAnomaly(fund_code, row.as_of, row.net_flow_try, z, abs(z) >= z_threshold))
+    return sorted(result, key=lambda r: (r.as_of, r.fund_code))
 
 
 def summarize_sector_flows(
     flows: Iterable[FundFlow], as_of: date | None = None
 ) -> list[SectorFlow]:
-    """Aggregate fund flows by declared sector exposure.
+    """Aggregate explicitly tagged fund flows by sector.
 
-    A fund may be tagged to a sector by the upstream holdings/exposure adapter.
-    No sector is inferred from a fund name.
+    For stock-level sector exposure, prefer ``estimate_sector_flows`` in
+    ``smart_money.py`` because it weights a fund's flow by actual holdings.
     """
     rows = list(flows)
     if as_of is None:
