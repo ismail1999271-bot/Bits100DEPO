@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import datetime
 
 from bist_hunter.backtest.engine import CostModel, simulate_trade
 from bist_hunter.data.schema import NormalizedNews
