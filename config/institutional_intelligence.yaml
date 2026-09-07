@@ -1,0 +1,74 @@
+# Institutional research layer. These are capabilities/contracts, not claims of licensed feeds.
+# Connectors must provide point-in-time observations and preserve source timestamps.
+version: 1
+weights:
+  market: 0.50
+  smart_money: 0.20
+  consensus: 0.10
+  research: 0.10
+  fundamentals: 0.10
+
+source_families:
+  market:
+    - realtime_market
+    - order_book
+    - derivatives
+    - liquidity
+  research:
+    - news
+    - filings
+    - earnings_transcripts
+    - broker_research
+    - expert_network
+  fundamentals:
+    - financial_statements
+    - valuation
+    - peer_comps
+    - analyst_estimates
+  institutional:
+    - fund_holdings
+    - fund_flows
+    - manager_exposure
+    - ownership_changes
+    - m_and_a
+    - private_market
+  alternative:
+    - web_attention
+    - social
+    - app_usage
+    - supply_chain
+    - satellite
+
+source_reliability:
+  official_filing: 1.00
+  exchange: 1.00
+  regulated_disclosure: 0.95
+  institutional_snapshot: 0.90
+  research_vendor: 0.90
+  reputable_news: 0.85
+  social: 0.55
+  unverified_web: 0.35
+
+controls:
+  require_point_in_time: true
+  reject_future_as_of: true
+  preserve_source_timestamp: true
+  preserve_source_url: true
+  require_evidence_for_ai_claims: true
+  never_invent_missing_aum: true
+  never_treat_snapshot_as_trade_ledger: true
+  separate_discovery_from_execution: true
+  quarantine_low_quality_data: true
+
+outputs:
+  - institutional_score
+  - institutional_data_coverage
+  - consensus_score
+  - smart_money_score
+  - analyst_revision_score
+  - research_score
+  - fundamental_score
+  - estimated_exposure_try
+  - concentration_risk
+  - evidence_chain
+  - disagreement_flags
