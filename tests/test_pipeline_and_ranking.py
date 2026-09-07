@@ -1,9 +1,8 @@
 from datetime import datetime, timezone
-import pandas as pd
 
+from bist_hunter.features import FeatureSnapshot
 from bist_hunter.pipeline import normalize_ohlcv, time_split
 from bist_hunter.ranking import rank_candidates
-from bist_hunter.features import FeatureSnapshot
 
 
 def test_normalize_and_split():
