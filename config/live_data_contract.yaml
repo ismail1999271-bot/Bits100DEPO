@@ -1,0 +1,33 @@
+version: 1
+mode: fail_closed
+
+providers:
+  bist_market:
+    endpoint_env: BIST_MARKET_DATA_URL
+    required_fields: [symbol, observed_at, price, volume]
+  kap:
+    endpoint_env: KAP_API_URL
+    required_fields: [symbol, observed_at, headline_or_text]
+  fund_flow:
+    endpoint_env: FUND_FLOW_API_URL
+    required_fields: [fund_id, as_of, net_flow]
+  broker_consensus:
+    endpoint_env: BROKER_DATA_URL
+    required_fields: [broker, symbol, observed_at, action]
+  institutional:
+    endpoint_env: INSTITUTIONAL_DATA_URL
+    required_fields: [source, symbol, observed_at]
+
+validation:
+  reject_future_as_of: true
+  require_observed_at: true
+  reject_duplicate_events: true
+  reject_unknown_symbols: true
+  no_synthetic_live_data: true
+
+paper_trading:
+  enabled_by_default: true
+  live_orders_enabled: false
+  minimum_oos_validation_required: true
+  max_daily_loss_pct: 2.0
+  max_position_pct: 10.0
