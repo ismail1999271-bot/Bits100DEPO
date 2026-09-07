@@ -1,13 +1,10 @@
-"""06:00 research job orchestration.
-
-The job is safe by default: without a configured market-data endpoint it emits
-an explicit NO_LIVE_DATA state instead of inventing a signal.
-"""
+"""06:00 research job orchestration."""
 from dataclasses import dataclass
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from .adapters import BistMarketDataAdapter, HttpJsonProvider, ProviderError, parse_json_records
+from .real_morning import run_real_morning
 from .telegram_report import send_message
 
 
@@ -26,12 +23,19 @@ def build_morning_message(records: list[dict]) -> str:
 
 
 def run_morning_job() -> MorningResult:
+    if os.getenv("BIST_SYMBOLS"):
+        try:
+            message = run_real_morning()
+            return MorningResult("SENT", message)
+        except ProviderError as exc:
+            return MorningResult("PROVIDER_ERROR", f"🔴 Gerçek veri hattı hatası: {exc}")
+
     endpoint = os.getenv("BIST_MARKET_DATA_URL", "")
     if not endpoint:
         return MorningResult("NO_LIVE_DATA", "🔴 Canlı BIST veri sağlayıcısı yapılandırılmamış; sinyal üretilmedi.")
     try:
         adapter = BistMarketDataAdapter(HttpJsonProvider(endpoint))
-        payload = adapter.bars("ALL", "latest", datetime.now(timezone.utc).date().isoformat())
+        payload = adapter.bars("ALL", "latest", datetime.now(UTC).date().isoformat())
         records = parse_json_records(payload)
         message = build_morning_message(records)
         sent = send_message(message)
