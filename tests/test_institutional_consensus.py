@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date
 
 from bist_hunter.institutional_consensus import (
     InstitutionalHolding,
