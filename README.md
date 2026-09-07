@@ -24,6 +24,48 @@ Ana hedef, geçmiş BIST tavan olaylarının ortak özelliklerini veriyle keşfe
 12. TEFAS/fon akışı → Smart Money katmanı
 13. **Institutional Consensus: büyük portföy yönetim şirketleri arasında ortak hisse yoğunlaşması**
 14. **Technology Scout Agent: yeni quant/AI/agent/data teknolojilerini düzenli araştırıp deney önerisi üretme**
+15. **Institutional Intelligence: kurumsal araştırma, tahmin revizyonları, portföy riski, doküman/transkript analizi, sermaye hareketleri ve alternatif veri katmanları**
+
+## Institutional Intelligence Layer
+
+Kurumsal veri platformlarının faydalı yetenekleri tek bir vendor'a bağımlı olmadan normalize bir araştırma katmanında birleştirilir. Uygulama lisanslı veriyi taklit etmez; her sağlayıcı açıkça yapılandırılmış bir adapter üzerinden bağlanır.
+
+`institutional_intelligence.py` şu kabiliyetleri sağlar:
+
+- **Market layer:** fiyat/hacim, likidite, mikro yapı ve türev verileri için ortak skor sözleşmesi.
+- **Fundamental layer:** finansallar, değerleme, peer-comps ve şirket kalitesi skorları için ortak alanlar.
+- **Analyst layer:** EPS/gelir vb. tahminlerin point-in-time revizyon skorlaması.
+- **Research layer:** haber, KAP/filing, earnings transcript, broker research ve uzman görüşü sentiment/kanıt agregasyonu.
+- **Smart Money layer:** TEFAS/fon akışı ve tahmini maruziyet.
+- **Institutional Consensus:** aynı yöneticiye ait çok sayıda fonu tek kurum olarak sayan ortaklaşma ölçümü.
+- **Portfolio Risk:** top-1/top-5 ağırlık, Herfindahl endeksi ve effective positions.
+- **Private-market/transactions:** PE/VC/M&A ve sermaye hareketleri için normalize veri sözleşmesi.
+- **Alternative data:** web attention, sosyal, supply-chain ve diğer alternatif veri kümeleri için adapter alanı.
+- **Evidence chain:** AI tarafından üretilen iddiaların kaynağı, gözlem zamanı ve güveni korunur.
+- **Data coverage:** veri eksikliği gizlenmez; `institutional_data_coverage` ile raporlanır.
+- **Disagreement flags:** farklı veri ailelerinin ters yönlü sinyallerini daha sonra risk katmanında cezalandırmaya uygun hale getirir.
+
+Varsayılan composite ağırlıklar: **Market %50 + Smart Money %20 + Institutional Consensus %10 + Research %10 + Fundamentals %10**. Ağırlıklar `config/institutional_intelligence.yaml` üzerinden değiştirilebilir ve backtest ile doğrulanmadan üretim sinyali olarak kabul edilmez.
+
+### Vendor capability mapping
+
+- **Bloomberg Terminal:** gerçek zamanlı piyasa, haber, makro ve entegre araştırma iş akışları.
+- **LSEG Workspace:** piyasa verisi, Reuters haberleri, analist tahminleri ve analitik.
+- **FactSet:** portföy analitiği, benchmark, risk ve performans attribution.
+- **S&P Capital IQ Pro:** şirket finansalları, değerleme, emsal şirket ve işlem verileri.
+- **AlphaSense:** filing, transcript, araştırma ve haberlerde semantik/AI arama.
+- **PitchBook:** private-company, PE/VC, M&A, yatırımcı ve sermaye hareketleri.
+- **Preqin:** hedge fund, private equity, VC, private credit ve alternatif yatırım istihbaratı.
+
+Bu isimler veri sağlayıcısı bağımlılığı anlamına gelmez; **yetenek haritasıdır**. Gerçek feed yalnızca yetkili/lisanslı kaynaklardan gelir.
+
+## Institutional data fabric
+
+`institutional_adapters.py` ile sekiz veri ailesi için ortak sözleşme tanımlanmıştır: `market`, `fundamentals`, `estimates`, `holdings`, `flows`, `research`, `transactions`, `alternative`.
+
+Her kayıt için `observed_at` zorunludur; mevcutsa `as_of` korunur. `as_of > observed_at` olan kayıtlar look-ahead olarak reddedilir. AUM yoksa tahmini pozisyon değeri uydurulmaz. Portföy snapshot'ı trade ledger olarak yorumlanmaz.
+
+`config/data_fabric.yaml` içindeki 10.000 kaynak kapasite hedefi ve günlük 48.000 simülasyon hedefi **mimari/araştırma kapasitesi hedefidir**; sistem hiçbir zaman var olmayan canlı feed'leri varmış gibi göstermemelidir.
 
 ## Technology Scout Agent
 
@@ -84,7 +126,7 @@ Sosyal medyada görülen “ayın en çok kazandıran hisseleri” formatı proj
 - Yeterli geçmişi olmayan hisseler otomatik dışarıda bırakılır.
 - Bu tablo tek başına al/sat sinyali değildir; sinyal motoruna momentum bağlamı sağlamak için kullanılır.
 
-Bu katman günlük 06:00 raporunda şu formatta kullanılabilir: **Performans Liderleri → Yeni Yükselenler → Momentum İvmesi → Haber/KAP Katalizörü → Smart Money → Tavan Skoru**.
+Bu katman günlük 06:00 raporunda şu formatta kullanılabilir: **Performans Liderleri → Yeni Yükselenler → Momentum İvmesi → Haber/KAP Katalizörü → Smart Money → Institutional Consensus → Tavan Skoru**.
 
 ## Temel KPI'lar
 
@@ -97,6 +139,8 @@ Bu katman günlük 06:00 raporunda şu formatta kullanılabilir: **Performans Li
 - Komisyon, spread, slippage ve likidite sonrası performans
 - Smart Money katkısı: pozitif/negatif fon akışı ayrışmasının sinyal precision ve lead time üzerindeki etkisi
 - Institutional Consensus katkısı: kurum genişliği ve pozisyon artışlarının precision/lead time üzerindeki etkisi
+- Institutional Intelligence katkısı: research/fundamental/estimate katmanlarının incremental lift'i
+- Data coverage ve kaynak güvenilirliği
 
 Sistem kaliteli fırsat yoksa zorla hisse seçmez ve `NO_QUALITY_SIGNAL` döndürebilir.
 
