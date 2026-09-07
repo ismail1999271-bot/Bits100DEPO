@@ -1,0 +1,41 @@
+# Sources and themes for the Technology Scout agent.
+# These are research targets, not trading recommendations.
+
+firms:
+  - Two Sigma
+  - Man Group / Man AHL / Man Numeric
+  - Jane Street
+  - AQR
+
+platforms:
+  - QuantConnect / LEAN
+  - Anthropic Claude Agent SDK / Agent Skills
+
+research:
+  - systematic investing
+  - alternative data
+  - NLP financial event extraction
+  - market microstructure
+  - liquidity and manipulation detection
+  - machine learning ranking
+  - walk-forward validation
+  - regime detection
+  - agentic research workflows
+  - portfolio construction and execution
+
+sources:
+  - https://www.twosigma.com/
+  - https://www.man.com/
+  - https://www.janestreet.com/
+  - https://www.aqr.com/
+  - https://www.quantconnect.com/
+  - https://github.com/anthropics/skills
+  - https://github.com/anthropics/claude-agent-sdk-python
+  - https://arxiv.org/
+
+cadence: weekly
+policy:
+  - Do not copy proprietary strategies.
+  - Do not use undocumented performance claims as evidence.
+  - Do not deploy a new signal without out-of-sample validation.
+  - Prefer improvements that can be measured in Top-K precision, recall, lead time, net P&L, drawdown or data quality.
