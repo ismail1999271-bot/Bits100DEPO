@@ -46,6 +46,11 @@ class ResearchMemory:
     def record_signal(self, attribution: SignalAttribution) -> None:
         self._append({"type": "signal", **asdict(attribution)})
 
+    def close_signal(self, signal_id: str, outcome_return: float, hit_threshold: float = 0.10) -> bool:
+        hit = float(outcome_return) >= hit_threshold
+        self._append({"type": "signal_outcome", "signal_id": signal_id, "outcome_return": float(outcome_return), "hit": hit, "closed_at": datetime.now(UTC).isoformat()})
+        return hit
+
     def load(self) -> list[dict[str, object]]:
         if not self.path.exists():
             return []
@@ -54,7 +59,4 @@ class ResearchMemory:
 
     def summary(self) -> dict[str, int]:
         rows = self.load()
-        return {
-            "experiments": sum(row.get("type") == "experiment" for row in rows),
-            "signals": sum(row.get("type") == "signal" for row in rows),
-        }
+        return {"experiments": sum(row.get("type") == "experiment" for row in rows), "signals": sum(row.get("type") == "signal" for row in rows), "outcomes": sum(row.get("type") == "signal_outcome" for row in rows)}
