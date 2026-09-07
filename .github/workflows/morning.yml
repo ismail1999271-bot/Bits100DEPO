@@ -14,9 +14,15 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install -e .
-      - name: Run 06:00 research job
+      - name: Run 06:00 real Top-K research job
         env:
+          BIST_SYMBOLS: ${{ secrets.BIST_SYMBOLS }}
           BIST_MARKET_DATA_URL: ${{ secrets.BIST_MARKET_DATA_URL }}
+          KAP_API_URL: ${{ secrets.KAP_API_URL }}
+          KAP_API_KEY: ${{ secrets.KAP_API_KEY }}
+          NEWS_RSS_URL: ${{ secrets.NEWS_RSS_URL }}
+          FUND_FLOW_API_URL: ${{ secrets.FUND_FLOW_API_URL }}
+          FUND_FLOW_API_KEY: ${{ secrets.FUND_FLOW_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python -m bist_hunter
