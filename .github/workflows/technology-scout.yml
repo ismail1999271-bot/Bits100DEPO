@@ -1,0 +1,27 @@
+name: Technology Scout
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 5 * * 1'
+
+jobs:
+  scout:
+    if: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e '.[agents]'
+      - name: Run Claude technology scout
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python scripts/run_technology_scout.py
+      - name: Upload scout report
+        uses: actions/upload-artifact@v4
+        with:
+          name: technology-scout-report
+          path: technology_scout_report.md
