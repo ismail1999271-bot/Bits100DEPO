@@ -8,9 +8,8 @@ from __future__ import annotations
 
 import json
 import os
-import time
 import xml.etree.ElementTree as ET
-from datetime import date, datetime, timedelta, UTC
+from datetime import UTC, date, datetime, timedelta
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -76,15 +75,12 @@ def fetch_kap_disclosures(start: date, end: date) -> list[dict[str, object]]:
 
 def fetch_news_rss(url: str) -> list[dict[str, object]]:
     root = ET.fromstring(_get(url))
-    rows = []
-    for item in root.findall(".//item"):
-        rows.append({
-            "source": "rss",
-            "title": (item.findtext("title") or "").strip(),
-            "url": (item.findtext("link") or "").strip(),
-            "published_at": (item.findtext("pubDate") or "").strip(),
-        })
-    return rows
+    return [{
+        "source": "rss",
+        "title": (item.findtext("title") or "").strip(),
+        "url": (item.findtext("link") or "").strip(),
+        "published_at": (item.findtext("pubDate") or "").strip(),
+    } for item in root.findall(".//item")]
 
 
 def fetch_fund_flow(start: date, end: date) -> list[dict[str, object]]:
