@@ -35,16 +35,28 @@ def add_features(frame: pd.DataFrame) -> pd.DataFrame:
 def rank_latest(frame: pd.DataFrame, config: RankingConfig = RankingConfig()) -> pd.DataFrame:
     """Rank the latest observation per symbol.
 
-    If institutional layer columns are present, they are blended into ``institutional_score``.
-    Existing OHLCV-only callers retain the legacy score while receiving a 50-point neutral
-    institutional baseline. This allows connectors to be rolled out incrementally.
+    The institutional layer is activated only when at least one institutional feature column is
+    supplied. This preserves the historical OHLCV ranking for existing data pipelines while
+    allowing Smart Money, consensus, research and fundamental feeds to be rolled in incrementally.
     """
     enriched = add_features(frame)
     latest = enriched.sort_values("timestamp").groupby("symbol", as_index=False).tail(1)
-    latest = build_institutional_score(latest, weights=config.institutional_weights)
+    institutional_columns = {
+        "smart_money_score",
+        "consensus_score",
+        "research_score",
+        "fundamental_score",
+    }
+    if institutional_columns.intersection(latest.columns):
+        latest = build_institutional_score(latest, weights=config.institutional_weights)
+        score_column = "institutional_score"
+    else:
+        latest["institutional_score"] = latest["score"]
+        latest["institutional_data_coverage"] = 0.0
+        score_column = "score"
     return (
-        latest[latest["institutional_score"] >= config.min_score]
-        .sort_values("institutional_score", ascending=False)
+        latest[latest[score_column] >= config.min_score]
+        .sort_values(score_column, ascending=False)
         .head(config.top_k)
         .reset_index(drop=True)
     )
