@@ -20,12 +20,12 @@ def _get(url: str, headers: dict[str, str] | None = None, timeout: float = 20.0)
         raise ProviderError(f"HTTP request failed: {exc}") from exc
 
 
-def yahoo_chart(symbol: str, start: date, end: date) -> list[dict[str, object]]:
+def yahoo_chart(symbol: str, start: date, end: date, interval: str = "1d") -> list[dict[str, object]]:
     ticker = symbol if symbol.endswith(".IS") else f"{symbol}.IS"
     params = urlencode({
         "period1": int(datetime.combine(start, datetime.min.time(), UTC).timestamp()),
         "period2": int(datetime.combine(end + timedelta(days=1), datetime.min.time(), UTC).timestamp()),
-        "interval": "1d", "events": "history", "includeAdjustedClose": "true",
+        "interval": interval, "events": "history", "includeAdjustedClose": "true",
     })
     payload = json.loads(_get(f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?{params}").decode())
     result = payload.get("chart", {}).get("result")
@@ -40,6 +40,45 @@ def yahoo_chart(symbol: str, start: date, end: date) -> list[dict[str, object]]:
         if all(value is not None for value in values.values()):
             rows.append({"symbol": symbol, "timestamp": datetime.fromtimestamp(stamp, UTC).isoformat(), **values})
     return rows
+
+
+def historical_bars(symbol: str, start: date, end: date) -> list[dict[str, object]]:
+    """Use the configured licensed BIST history provider, otherwise Yahoo as a public fallback."""
+    endpoint = os.getenv("BIST_HISTORICAL_API_URL", "")
+    if endpoint:
+        rows = _records_from_endpoint(endpoint, "BIST_DATA_API_KEY", {
+            "symbol": symbol, "start": start.isoformat(), "end": end.isoformat(), "interval": "1d",
+        })
+        normalized = []
+        for row in rows:
+            try:
+                normalized.append({
+                    "symbol": symbol,
+                    "timestamp": row.get("timestamp", row.get("date")),
+                    "open": float(row["open"]), "high": float(row["high"]),
+                    "low": float(row["low"]), "close": float(row["close"]),
+                    "volume": float(row.get("volume", 0)),
+                })
+            except (KeyError, TypeError, ValueError):
+                continue
+        if not normalized:
+            raise ProviderError(f"historical provider returned no valid rows for {symbol}")
+        return normalized
+    return yahoo_chart(symbol, start, end)
+
+
+def intraday_bars(symbol: str, start: datetime, end: datetime, interval: str = "5m") -> list[dict[str, object]]:
+    endpoint = os.getenv("BIST_INTRADAY_API_URL", "")
+    if endpoint:
+        rows = _records_from_endpoint(endpoint, "BIST_DATA_API_KEY", {
+            "symbol": symbol, "start": start.isoformat(), "end": end.isoformat(), "interval": interval,
+        })
+        return [{
+            "symbol": symbol, "timestamp": row.get("timestamp", row.get("date")),
+            "open": float(row["open"]), "high": float(row["high"]), "low": float(row["low"]),
+            "close": float(row["close"]), "volume": float(row.get("volume", 0)),
+        } for row in rows]
+    return yahoo_chart(symbol, start.date(), end.date(), interval=interval)
 
 
 def _records_from_endpoint(endpoint: str, token_env: str | None = None, params: dict[str, str] | None = None) -> list[dict[str, object]]:
@@ -60,7 +99,6 @@ def _records_from_endpoint(endpoint: str, token_env: str | None = None, params: 
 
 
 def load_symbol_universe() -> list[str]:
-    """Load the complete eligible universe; refuse partial hard-coded universes."""
     endpoint = os.getenv("BIST_UNIVERSE_URL", "")
     if endpoint:
         rows = _records_from_endpoint(endpoint, "BIST_DATA_API_KEY")
@@ -85,18 +123,16 @@ def fetch_kap_disclosures(start: date, end: date) -> list[dict[str, object]]:
     if not endpoint:
         raise ProviderError("KAP_API_URL is not configured")
     rows = _records_from_endpoint(endpoint, "KAP_API_KEY", {"start": start.isoformat(), "end": end.isoformat()})
-    return [{
-        "symbol": str(row.get("symbol", row.get("stockCode", row.get("memberCode", "")))).upper(),
-        "title": str(row.get("title", row.get("subject", ""))),
-        "text": str(row.get("text", row.get("summary", ""))),
-        "published_at": row.get("published_at", row.get("publishDate")),
-        "source_id": row.get("id", row.get("disclosureId")),
-    } for row in rows]
+    return [{"symbol": str(row.get("symbol", row.get("stockCode", row.get("memberCode", "")))).upper(), "title": str(row.get("title", row.get("subject", ""))), "text": str(row.get("text", row.get("summary", ""))), "published_at": row.get("published_at", row.get("publishDate")), "source_id": row.get("id", row.get("disclosureId"))} for row in rows]
 
 
 def fetch_news_rss(url: str) -> list[dict[str, object]]:
     root = ET.fromstring(_get(url))
-    return [{"source": "rss", "title": (item.findtext("title") or "").strip(), "url": (item.findtext("link") or "").strip(), "published_at": (item.findtext("pubDate") or "").strip()} for item in root.findall(".//item")]
+    rows = []
+    for item in root.findall(".//item"):
+        categories = [((node.text or "").strip().upper()) for node in item.findall("category")]
+        rows.append({"source": "rss", "symbol": next((x for x in categories if 2 < len(x) <= 6 and x.isascii() and x.isalnum()), ""), "title": (item.findtext("title") or "").strip(), "description": (item.findtext("description") or "").strip(), "url": (item.findtext("link") or "").strip(), "published_at": (item.findtext("pubDate") or "").strip()})
+    return rows
 
 
 def fetch_fund_flow(start: date, end: date) -> list[dict[str, object]]:
@@ -104,18 +140,8 @@ def fetch_fund_flow(start: date, end: date) -> list[dict[str, object]]:
     if not endpoint:
         raise ProviderError("FUND_FLOW_API_URL is not configured")
     rows = _records_from_endpoint(endpoint, "FUND_FLOW_API_KEY", {"start": start.isoformat(), "end": end.isoformat()})
-    return [{
-        "symbol": str(row.get("symbol", row.get("stockCode", row.get("ticker", "")))).upper(),
-        "score": row.get("score"), "net_flow": row.get("net_flow", row.get("netFlow", 0)),
-        "source_id": row.get("id", row.get("fundId")),
-    } for row in rows]
+    return [{"symbol": str(row.get("symbol", row.get("stockCode", row.get("ticker", "")))).upper(), "score": row.get("score"), "net_flow": row.get("net_flow", row.get("netFlow", 0)), "source_id": row.get("id", row.get("fundId"))} for row in rows]
 
 
 def source_healthcheck() -> dict[str, bool]:
-    return {
-        "market": bool(os.getenv("BIST_UNIVERSE_URL") or os.getenv("BIST_SYMBOLS")),
-        "kap": bool(os.getenv("KAP_API_URL") and os.getenv("KAP_API_KEY")),
-        "fund_flow": bool(os.getenv("FUND_FLOW_API_URL") and os.getenv("FUND_FLOW_API_KEY")),
-        "news_rss": bool(os.getenv("NEWS_RSS_URL")),
-        "telegram": bool(os.getenv("TELEGRAM_BOT_TOKEN") and os.getenv("TELEGRAM_CHAT_ID")),
-    }
+    return {"market": bool(os.getenv("BIST_UNIVERSE_URL") or os.getenv("BIST_SYMBOLS")), "historical": bool(os.getenv("BIST_HISTORICAL_API_URL") or os.getenv("BIST_SYMBOLS")), "intraday": bool(os.getenv("BIST_INTRADAY_API_URL") or os.getenv("BIST_SYMBOLS")), "kap": bool(os.getenv("KAP_API_URL") and os.getenv("KAP_API_KEY")), "fund_flow": bool(os.getenv("FUND_FLOW_API_URL") and os.getenv("FUND_FLOW_API_KEY")), "news_rss": bool(os.getenv("NEWS_RSS_URL")), "telegram": bool(os.getenv("TELEGRAM_BOT_TOKEN") and os.getenv("TELEGRAM_CHAT_ID"))}
