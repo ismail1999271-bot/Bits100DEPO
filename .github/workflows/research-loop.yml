@@ -7,7 +7,7 @@ on:
 
 jobs:
   research:
-    if: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+    if: ${{ secrets.OPENAI_API_KEY != '' || secrets.ANTHROPIC_API_KEY != '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,8 +15,11 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install -e '.[agents]'
-      - name: Scout -> Quant -> Audit
+      - name: GPT-6 Astra + Claude -> Quant -> Audit
         env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: gpt-6-astra
+          OPENAI_REASONING_EFFORT: high
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python scripts/run_research_loop.py
       - uses: actions/upload-artifact@v4
