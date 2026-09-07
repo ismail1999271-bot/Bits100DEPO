@@ -9,7 +9,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import Iterable, Mapping
 
 import numpy as np
 import pandas as pd
@@ -77,11 +76,7 @@ def validate_point_in_time(frame: pd.DataFrame, *, as_of_col: str = "as_of", obs
 
 
 def institutional_consensus(positions: pd.DataFrame, *, as_of: datetime | None = None) -> pd.DataFrame:
-    """Score cross-manager ownership concentration and position changes (0-100).
-
-    Expected columns: symbol, manager, weight, change, as_of. ``change`` is the change in
-    portfolio weight; it is not interpreted as a daily trade ledger.
-    """
+    """Score cross-manager ownership concentration and position changes (0-100)."""
     required = {"symbol", "manager", "weight", "change", "as_of"}
     missing = required.difference(positions.columns)
     if missing:
@@ -92,7 +87,6 @@ def institutional_consensus(positions: pd.DataFrame, *, as_of: datetime | None =
         data = data[data["as_of"] <= cutoff]
     if data.empty:
         return pd.DataFrame(columns=["symbol", "manager_count", "fund_count", "consensus_score"])
-
     grouped = data.groupby("symbol", sort=False)
     out = grouped.agg(
         manager_count=("manager", "nunique"),
@@ -108,7 +102,9 @@ def institutional_consensus(positions: pd.DataFrame, *, as_of: datetime | None =
     change = _clip(50 + out["mean_change"] / 0.02 * 50)
     entry = _clip(out["positive_managers"] / out["manager_count"].replace(0, 1) * 100)
     exit_penalty = _clip(out["exits"] / out["manager_count"].replace(0, 1) * 100)
-    out["consensus_score"] = _clip(0.30 * breadth + 0.25 * weight + 0.25 * change + 0.20 * entry - 0.20 * exit_penalty).round(2)
+    out["consensus_score"] = _clip(
+        0.30 * breadth + 0.25 * weight + 0.25 * change + 0.20 * entry - 0.20 * exit_penalty
+    ).round(2)
     return out.sort_values("consensus_score", ascending=False).reset_index(drop=True)
 
 
@@ -119,10 +115,9 @@ def estimate_exposure(positions: pd.DataFrame) -> pd.DataFrame:
     if missing:
         raise ValueError(f"missing columns: {sorted(missing)}")
     out = positions.copy()
-    if "aum_try" in out:
-        out["estimated_exposure_try"] = out["aum_try"] * out["weight"]
-    else:
-        out["estimated_exposure_try"] = np.nan
+    out["estimated_exposure_try"] = (
+        out["aum_try"] * out["weight"] if "aum_try" in out else np.nan
+    )
     return out
 
 
@@ -135,11 +130,13 @@ def analyst_revision_score(estimates: pd.DataFrame) -> pd.DataFrame:
     data = estimates.sort_values(["symbol", "period", "observed_at"]).copy()
     data["revision"] = data.groupby(["symbol", "period"])["estimate"].pct_change()
     score = data.groupby("symbol", sort=False)["revision"].last().fillna(0)
-    return pd.DataFrame({"symbol": score.index, "analyst_revision_score": _clip(50 + score * 500).round(2)}).reset_index(drop=True)
+    return pd.DataFrame(
+        {"symbol": score.index, "analyst_revision_score": _clip(50 + score * 500).round(2)}
+    ).reset_index(drop=True)
 
 
 def research_signal_score(documents: pd.DataFrame) -> pd.DataFrame:
-    """Aggregate document/transcript sentiment weighted by source confidence and freshness."""
+    """Aggregate document/transcript sentiment weighted by source confidence."""
     required = {"symbol", "sentiment", "confidence", "observed_at"}
     missing = required.difference(documents.columns)
     if missing:
@@ -147,18 +144,24 @@ def research_signal_score(documents: pd.DataFrame) -> pd.DataFrame:
     data = documents.copy()
     data["weight"] = pd.to_numeric(data["confidence"], errors="coerce").fillna(0).clip(0, 1)
     grouped = data.groupby("symbol", sort=False)
-    weighted = grouped.apply(lambda g: np.average(g["sentiment"], weights=g["weight"]) if g["weight"].sum() else 0.0, include_groups=False)
-    return pd.DataFrame({"symbol": weighted.index, "research_score": _clip(50 + weighted * 50).round(2)}).reset_index(drop=True)
+    weighted = grouped.apply(
+        lambda g: np.average(g["sentiment"], weights=g["weight"])
+        if g["weight"].sum()
+        else 0.0,
+        include_groups=False,
+    )
+    return pd.DataFrame(
+        {"symbol": weighted.index, "research_score": _clip(50 + weighted * 50).round(2)}
+    ).reset_index(drop=True)
 
 
-def build_institutional_score(frame: pd.DataFrame, *, weights: InstitutionalWeights = InstitutionalWeights()) -> pd.DataFrame:
-    """Build a single auditable 0-100 score from optional institutional layers.
-
-    Columns are optional except ``symbol`` and ``score``. This makes the function safe to use
-    while vendor feeds are being connected incrementally.
-    """
+def build_institutional_score(
+    frame: pd.DataFrame, *, weights: InstitutionalWeights | None = None
+) -> pd.DataFrame:
+    """Build a single auditable 0-100 score from optional institutional layers."""
     if "symbol" not in frame or "score" not in frame:
         raise ValueError("frame requires symbol and score columns")
+    weights = weights or InstitutionalWeights()
     out = frame.copy()
     layers = {
         "market": out["score"],
@@ -191,12 +194,15 @@ def portfolio_risk_summary(positions: pd.DataFrame) -> pd.DataFrame:
         weights = pd.to_numeric(group["weight"], errors="coerce").fillna(0).clip(lower=0)
         total = weights.sum()
         normalized = weights / total if total else weights
-        rows.append({
-            "portfolio": portfolio,
-            "positions": int(len(group)),
-            "top1_weight": float(normalized.nlargest(1).sum()),
-            "top5_weight": float(normalized.nlargest(5).sum()),
-            "herfindahl": float((normalized**2).sum()),
-            "effective_positions": float(1 / (normalized**2).sum()) if (normalized**2).sum() else 0.0,
-        })
+        hhi = (normalized**2).sum()
+        rows.append(
+            {
+                "portfolio": portfolio,
+                "positions": len(group),
+                "top1_weight": float(normalized.nlargest(1).sum()),
+                "top5_weight": float(normalized.nlargest(5).sum()),
+                "herfindahl": float(hhi),
+                "effective_positions": float(1 / hhi) if hhi else 0.0,
+            }
+        )
     return pd.DataFrame(rows)
