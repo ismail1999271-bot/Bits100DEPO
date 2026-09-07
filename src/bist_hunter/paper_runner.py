@@ -37,7 +37,7 @@ def run_paper_session(top_k: int = 5) -> dict[str, float]:
     for symbol in symbols:
         rows.extend(yahoo_chart(symbol, today - timedelta(days=45), today))
     frame = pd.DataFrame(rows)
-    ranked = rank_latest(frame, config=None) if False else rank_latest(frame)
+    ranked = rank_latest(frame)
     state = _load_state()
     positions = state.get("positions", {})
     initial = float(os.getenv("PAPER_INITIAL_EQUITY_TRY", "5000000"))
