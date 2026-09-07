@@ -1,5 +1,3 @@
-from datetime import datetime, timezone
-
 import pandas as pd
 import pytest
 
@@ -16,9 +14,7 @@ from bist_hunter.institutional_intelligence import (
 
 
 def test_point_in_time_rejects_future_information():
-    frame = pd.DataFrame(
-        [{"as_of": "2026-09-08", "observed_at": "2026-09-07"}]
-    )
+    frame = pd.DataFrame([{"as_of": "2026-09-08", "observed_at": "2026-09-07"}])
     with pytest.raises(ValueError, match="lookahead"):
         validate_point_in_time(frame)
 
@@ -44,7 +40,9 @@ def test_exposure_is_nan_without_aum():
 
 
 def test_exposure_uses_aum_times_weight():
-    frame = pd.DataFrame([{"symbol": "AAA", "manager": "Ak", "weight": 0.10, "aum_try": 1_000_000}])
+    frame = pd.DataFrame(
+        [{"symbol": "AAA", "manager": "Ak", "weight": 0.10, "aum_try": 1_000_000}]
+    )
     assert estimate_exposure(frame).iloc[0]["estimated_exposure_try"] == 100_000
 
 
@@ -87,7 +85,13 @@ def test_composite_score_and_coverage():
 
 def test_weights_must_sum_to_one():
     with pytest.raises(ValueError):
-        InstitutionalWeights(market=1.0, smart_money=0.0, consensus=0.0, research=0.0, fundamentals=0.1)
+        InstitutionalWeights(
+            market=1.0,
+            smart_money=0.0,
+            consensus=0.0,
+            research=0.0,
+            fundamentals=0.1,
+        )
 
 
 def test_portfolio_risk_summary_returns_effective_positions():
