@@ -23,7 +23,7 @@ def build_tavan_dataset(frame: pd.DataFrame, limit_pct: float = 0.10) -> pd.Data
     df["range_pct"] = (df["high"] - df["low"]) / df["close"].replace(0, np.nan)
     future_high = grouped["high"].shift(-1)
     df["target"] = (future_high >= df["close"] * (1 + limit_pct)).astype(float)
-    return df.dropna(subset=list(FEATURES)).copy()
+    return df.loc[future_high.notna()].dropna(subset=list(FEATURES)).copy()
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,6 +70,8 @@ class TavanLogisticModel:
 
 def chronological_train_test(frame: pd.DataFrame, test_fraction: float = 0.2) -> TavanModelResult:
     ordered = frame.sort_values("timestamp")
+    if len(ordered) < 2:
+        raise ValueError("at least two labeled observations are required")
     cut = max(1, min(len(ordered) - 1, int(len(ordered) * (1 - test_fraction))))
     train, test = ordered.iloc[:cut], ordered.iloc[cut:]
     model = TavanLogisticModel().fit(train)
