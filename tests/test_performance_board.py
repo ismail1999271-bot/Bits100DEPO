@@ -29,7 +29,7 @@ def test_builds_month_style_leaderboard_and_rank_change() -> None:
     assert rows[0].period_return_pct == 25.0
     assert rows[0].previous_period_return_pct == 20.0
     assert rows[1].rank_change == 1
-    assert rows[1].acceleration_pct == 15.0
+    assert rows[1].acceleration_pct == 15.53
 
 
 def test_excludes_symbols_without_two_full_periods() -> None:
