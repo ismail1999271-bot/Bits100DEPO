@@ -26,7 +26,7 @@ class PerformanceRow:
 
     @property
     def acceleration_pct(self) -> float:
-        """Change in period return versus the immediately preceding period."""
+        """Change in period return, measured in percentage points."""
         return self.period_return_pct - self.previous_period_return_pct
 
 
