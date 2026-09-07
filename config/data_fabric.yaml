@@ -1,0 +1,44 @@
+# Capacity-oriented source architecture. This does NOT claim 10,000 live feeds.
+# Each provider must be explicitly enabled and point-in-time validated.
+source_capacity_target: 10000
+categories:
+  - market_ohlcv
+  - order_book_microstructure
+  - corporate_actions
+  - kap_disclosures
+  - company_fundamentals
+  - analyst_estimates
+  - institutional_holdings
+  - fund_flows
+  - news
+  - social
+  - web_attention
+  - sector_macro
+  - volatility
+  - derivatives
+  - liquidity
+  - short_interest
+  - alternative_data
+  - sentiment
+  - event_labels
+policies:
+  require_point_in_time: true
+  require_source_timestamp: true
+  reject_lookahead: true
+  reject_survivorship_bias: true
+  require_cost_model: true
+  require_liquidity_model: true
+  require_oos_validation: true
+simulation:
+  daily_capacity_target: 48000
+  max_parallel_workers: 16
+  parameter_sweeps: true
+  walk_forward: true
+  untouched_holdout: true
+  scenario_axes:
+    - model
+    - feature_set
+    - horizon
+    - threshold
+    - execution_cost
+    - seed
