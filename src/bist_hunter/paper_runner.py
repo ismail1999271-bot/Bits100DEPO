@@ -3,9 +3,12 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pandas as pd
+
+from .daily_ranker import rank_latest
 from .paper_performance import PaperPerformanceLedger
 from .real_adapters import load_symbol_universe, yahoo_chart
 
@@ -30,24 +33,29 @@ def _save_state(state: dict[str, object]) -> None:
 def run_paper_session(top_k: int = 5) -> dict[str, float]:
     symbols = load_symbol_universe()
     today = datetime.now(UTC).date()
-    rows: dict[str, list[dict[str, object]]] = {}
+    rows: list[dict[str, object]] = []
     for symbol in symbols:
-        rows[symbol] = yahoo_chart(symbol, today - timedelta(days=45), today)
-    latest = {symbol: data[-1] for symbol, data in rows.items() if data}
-    ranked = sorted(latest.items(), key=lambda item: float(item[1]["close"]), reverse=True)
+        rows.extend(yahoo_chart(symbol, today - timedelta(days=45), today))
+    frame = pd.DataFrame(rows)
+    ranked = rank_latest(frame, config=None) if False else rank_latest(frame)
     state = _load_state()
     positions = state.get("positions", {})
     initial = float(os.getenv("PAPER_INITIAL_EQUITY_TRY", "5000000"))
-    if not positions and ranked:
-        selected = ranked[:max(1, top_k)]
+    if not positions and not ranked.empty:
+        selected = ranked.head(max(1, top_k))
         allocation = initial / len(selected)
-        positions = {symbol: {"quantity": allocation / float(row["close"]), "entry": float(row["close"])} for symbol, row in selected}
+        positions = {
+            str(row.symbol): {"quantity": allocation / float(row.close), "entry": float(row.close)}
+            for row in selected.itertuples()
+        }
         state["positions"] = positions
         state["last_entry_date"] = today.isoformat()
-    invested = 0.0
-    for symbol, position in positions.items():
-        if symbol in latest:
-            invested += float(position["quantity"]) * float(latest[symbol]["close"])
+    latest = {str(row.symbol): row for row in frame.sort_values("timestamp").groupby("symbol").tail(1).itertuples()}
+    invested = sum(
+        float(position["quantity"]) * float(latest[symbol].close)
+        for symbol, position in positions.items()
+        if symbol in latest
+    )
     cash = max(0.0, initial - sum(float(p["quantity"]) * float(p["entry"]) for p in positions.values()))
     equity = cash + invested
     ledger = PaperPerformanceLedger(os.getenv("PAPER_DATA_PATH", "data/paper_performance.jsonl"))
