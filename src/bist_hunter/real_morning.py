@@ -1,80 +1,77 @@
-"""06:00 real-data runner: universe -> intelligence -> Top-K -> Telegram."""
+"""06:00 real-data research runner; transport stays optional until Telegram activation."""
 from __future__ import annotations
 
 import math
 import os
-import re
 from datetime import UTC, date, datetime, timedelta
 
 import pandas as pd
 
 from .adapters import ProviderError
 from .daily_ranker import rank_latest
-from .real_adapters import fetch_fund_flow, fetch_kap_disclosures, fetch_news_rss, load_symbol_universe, yahoo_chart
+from .real_adapters import fetch_fund_flow, fetch_kap_disclosures, fetch_news_rss, historical_bars, load_symbol_universe
 from .telegram_report import send_message
 
-BULLISH_TERMS = ("yatırım", "sözleşme", "sipariş", "kar", "temettü", "geri alım", "ihale")
+BULLISH_TERMS = ("yatırım", "sözleşme", "sipariş", "kar", "kâr", "temettü", "geri alım", "ihale")
 BEARISH_TERMS = ("zarar", "iflas", "dava", "soruşturma", "sermaye artırımı")
 
 
 def _collect_market(symbols: list[str], start: date, end: date) -> pd.DataFrame:
     rows: list[dict[str, object]] = []
+    failures = 0
     for symbol in symbols:
-        rows.extend(yahoo_chart(symbol, start, end))
+        try:
+            rows.extend(historical_bars(symbol, start, end))
+        except ProviderError:
+            failures += 1
     if not rows:
-        raise ProviderError("no market rows returned for the configured universe")
+        raise ProviderError(f"no market rows returned; failed symbols={failures}")
     return pd.DataFrame(rows)
 
 
 def _event_scores(rows: list[dict[str, object]], text_keys: tuple[str, ...]) -> dict[str, float]:
-    scores: dict[str, list[float]] = {}
+    """Score only records carrying an explicit symbol; never infer tickers from prose."""
+    grouped: dict[str, list[float]] = {}
     for row in rows:
+        symbol = str(row.get("symbol", "")).upper().strip().removesuffix(".IS")
+        if not symbol:
+            continue
         text = " ".join(str(row.get(key, "")) for key in text_keys).lower()
         value = sum(term in text for term in BULLISH_TERMS) - sum(term in text for term in BEARISH_TERMS)
-        for symbol in re.findall(r"\b[A-ZÇĞİÖŞÜ]{3,6}\b", text.upper()):
-            if symbol not in {"KAP", "BIST", "RSS"}:
-                scores.setdefault(symbol, []).append(float(value))
-    return {symbol: max(0.0, min(100.0, 50.0 + 12.5 * sum(values) / max(1, len(values)))) for symbol, values in scores.items()}
+        grouped.setdefault(symbol, []).append(float(value))
+    return {s: max(0.0, min(100.0, 50.0 + 12.5 * sum(v) / max(1, len(v)))) for s, v in grouped.items()}
 
 
 def _fund_scores(rows: list[dict[str, object]]) -> dict[str, float]:
     out: dict[str, float] = {}
     for row in rows:
-        symbol = str(row.get("symbol", "")).upper()
+        symbol = str(row.get("symbol", "")).upper().strip().removesuffix(".IS")
         if not symbol:
             continue
+        raw_value = row.get("score")
+        if raw_value is None:
+            try:
+                raw_value = 50.0 + 50.0 * math.tanh(float(row.get("net_flow", 0.0)) / 100_000_000)
+            except (TypeError, ValueError):
+                continue
         try:
-            raw = float(row.get("score", row.get("net_flow", 0.0)))
+            out[symbol] = max(0.0, min(100.0, float(raw_value)))
         except (TypeError, ValueError):
             continue
-        if "score" not in row:
-            raw = 50.0 + 50.0 * math.tanh(raw / 100_000_000)
-        out[symbol] = max(0.0, min(100.0, raw))
     return out
 
 
-def run_real_morning(as_of: date | None = None) -> str:
+def run_real_morning(as_of: date | None = None, *, send_telegram: bool = False) -> str:
     day = as_of or datetime.now(UTC).date()
     symbols = load_symbol_universe()
-    frame = _collect_market(symbols, day - timedelta(days=45), day)
-    kap_rows: list[dict[str, object]] = []
-    fund_rows: list[dict[str, object]] = []
-    news_rows: list[dict[str, object]] = []
-    if os.getenv("KAP_API_URL"):
-        kap_rows = fetch_kap_disclosures(day - timedelta(days=1), day)
-    if os.getenv("FUND_FLOW_API_URL"):
-        fund_rows = fetch_fund_flow(day - timedelta(days=1), day)
-    if os.getenv("NEWS_RSS_URL"):
-        news_rows = fetch_news_rss(os.environ["NEWS_RSS_URL"])
+    frame = _collect_market(symbols, day - timedelta(days=90), day)
+    kap_rows = fetch_kap_disclosures(day - timedelta(days=1), day) if os.getenv("KAP_API_URL") else []
+    fund_rows = fetch_fund_flow(day - timedelta(days=1), day) if os.getenv("FUND_FLOW_API_URL") else []
+    news_rows = fetch_news_rss(os.environ["NEWS_RSS_URL"]) if os.getenv("NEWS_RSS_URL") else []
 
-    scores = (
-        ("smart_money_score", _fund_scores(fund_rows)),
-        ("fundamental_score", _event_scores(kap_rows, ("title", "headline", "subject", "text"))),
-        ("research_score", _event_scores(news_rows, ("title", "description", "summary"))),
-    )
-    for column, mapping in scores:
-        if mapping:
-            frame[column] = frame["symbol"].str.upper().map(mapping)
+    frame["smart_money_score"] = frame["symbol"].str.upper().map(_fund_scores(fund_rows))
+    frame["fundamental_score"] = frame["symbol"].str.upper().map(_event_scores(kap_rows, ("title", "text")))
+    frame["research_score"] = frame["symbol"].str.upper().map(_event_scores(news_rows, ("title", "description")))
     ranked = rank_latest(frame)
     lines = ["🌅 BITS100 — 06:00 GERÇEK VERİ", f"Evren: {len(symbols)} | OHLCV satırı: {len(frame)}"]
     if ranked.empty:
@@ -82,8 +79,10 @@ def run_real_morning(as_of: date | None = None) -> str:
     else:
         for index, row in ranked.head(20).iterrows():
             score = float(row.get("institutional_score", row.get("score", 0.0)))
-            lines.append(f"{index + 1}. {row['symbol']} | skor={score:.2f}")
-    lines.append(f"Kaynaklar: OHLCV + KAP:{len(kap_rows)} + NEWS:{len(news_rows)} + FUND:{len(fund_rows)}")
+            coverage = float(row.get("institutional_data_coverage", 0.0))
+            lines.append(f"{index + 1}. {row['symbol']} | skor={score:.2f} | veri-kapsamı={coverage:.0%}")
+    lines.append(f"Kaynaklar: HISTORICAL + KAP:{len(kap_rows)} + NEWS:{len(news_rows)} + FUND:{len(fund_rows)}")
     message = "\n".join(lines)
-    send_message(message)
+    if send_telegram:
+        send_message(message)
     return message
