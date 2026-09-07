@@ -23,6 +23,23 @@ Ana hedef, geçmiş BIST tavan olaylarının ortak özelliklerini veriyle keşfe
 11. Performans leaderboard'u: 1 gün / 5 gün / aylık momentum ve sıralama değişimi
 12. TEFAS/fon akışı → Smart Money katmanı
 13. **Institutional Consensus: büyük portföy yönetim şirketleri arasında ortak hisse yoğunlaşması**
+14. **Technology Scout Agent: yeni quant/AI/agent/data teknolojilerini düzenli araştırıp deney önerisi üretme**
+
+## Technology Scout Agent
+
+Projeye opsiyonel **Claude Agent SDK** tabanlı, read-only bir R&D ajanı eklendi. Anthropic'in Agent SDK'sı Claude Code yeteneklerini programatik ajanlara açıyor; Python SDK `query()` ve `ClaudeAgentOptions` üzerinden araçları ve çalışma alanını kontrol etmeye izin veriyor. urlClaude Agent SDK Pythonhttps://github.com/anthropics/claude-agent-sdk-python
+
+Ajanın görevi:
+
+- Two Sigma, Man AHL/Man Numeric, Jane Street, AQR gibi sistematik yatırım ekiplerinin kamuya açık araştırmalarını izlemek.
+- QuantConnect/LEAN, akademik çalışmalar, alternatif veri, NLP, market microstructure ve agentic AI gelişmelerini taramak.
+- Yeni fikri doğrudan sinyale çevirmek yerine **ADOPT / EXPERIMENT / WATCH / REJECT** kararı üretmek.
+- Look-ahead leakage, survivorship bias, veri lisansı, likidite/manipülasyon, maliyet ve overfit risklerini kontrol etmek.
+- Öneriyi mevcut KPI'lara bağlamak: Top-K precision, recall, lead time, net P&L, drawdown ve data quality.
+
+Anthropic'in Agent Skills yaklaşımından da yararlanıyoruz: beceriler `SKILL.md` ile modüler ve yeniden kullanılabilir talimatlar olarak tanımlanabiliyor. Bizim BIST özel skill'imiz `.claude/skills/bist-technology-scout/SKILL.md` altında tutuluyor. urlAnthropic Agent Skillshttps://github.com/anthropics/skills
+
+`config/research_watchlist.yaml` araştırma evrenini tanımlar. `.github/workflows/technology-scout.yml` ise API anahtarı sağlandığında haftalık araştırma çalıştırır; anahtar yoksa ana CI etkilenmez. Ajanın dosya değiştirme, shell veya işlem yapma yetkisi yoktur; üretim değişiklikleri deney → backtest → CI hattından geçmek zorundadır.
 
 ## Fon akışı / Smart Money katmanı
 
