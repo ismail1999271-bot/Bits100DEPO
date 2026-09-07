@@ -1,0 +1,71 @@
+name: Bits100 GPT-6 Astra Coding Loop
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * 1'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  astra:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install project
+        run: pip install -e '.[dev]'
+
+      - name: Configure git
+        run: |
+          git config user.name 'Bits100 Astra Bot'
+          git config user.email 'bits100-astra-bot@users.noreply.github.com'
+
+      - name: Create isolated work branch
+        run: git switch -c astra/completion-${{ github.run_id }}
+
+      - name: GPT-6 Astra audit, implement and verify
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: gpt-6-astra
+          ASTRA_MAX_ATTEMPTS: '3'
+        run: python scripts/run_astra_coding_loop.py
+
+      - name: Commit verified changes
+        run: |
+          git add -A
+          git status --short
+          git diff --cached --check
+          git commit -m 'astra: complete verified Bits100 improvements'
+
+      - name: Push Astra branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: git push --set-upstream origin HEAD
+
+      - name: Open draft pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr create \
+            --base main \
+            --head "$(git branch --show-current)" \
+            --draft \
+            --title 'Astra: verified Bits100 completion pass' \
+            --body 'GPT-6 Astra audited the repository, implemented the highest-value missing software, and passed compile + pytest + Ruff gates. Review the diff before merging. External market-data credentials remain required for live production.'
+
+      - name: Upload completion report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: astra-completion-report
+          path: astra_completion_report.md
+          if-no-files-found: ignore
