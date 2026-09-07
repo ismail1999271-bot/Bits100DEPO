@@ -60,6 +60,8 @@ def build_scout_prompt(repository_summary: str, watchlist: str) -> str:
 
         RESEARCH RULES:
         {rules}
+        Explicitly test for point-in-time integrity and look-ahead leakage in
+        every proposed data source, feature, label and validation procedure.
 
         For every candidate improvement return:
         1. What changed in the world/research/tooling.
