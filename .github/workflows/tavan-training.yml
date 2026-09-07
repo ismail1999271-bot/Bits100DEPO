@@ -17,22 +17,29 @@ jobs:
       - name: Build real historical dataset and train
         env:
           BIST_SYMBOLS: ${{ secrets.BIST_SYMBOLS }}
+          BIST_UNIVERSE_URL: ${{ secrets.BIST_UNIVERSE_URL }}
+          BIST_HISTORICAL_API_URL: ${{ secrets.BIST_HISTORICAL_API_URL }}
+          BIST_DATA_API_KEY: ${{ secrets.BIST_DATA_API_KEY }}
         run: |
           python - <<'PY'
           import json
-          from datetime import UTC, date, timedelta
-          from bist_hunter.real_adapters import load_symbol_universe, yahoo_chart
-          from bist_hunter.tavan_model import build_tavan_dataset, chronological_train_test
+          from datetime import date, timedelta
           import pandas as pd
+          from bist_hunter.real_adapters import historical_bars, load_symbol_universe
+          from bist_hunter.tavan_model import build_tavan_dataset, chronological_train_test
           symbols = load_symbol_universe()
           end = date.today()
           rows = []
+          failures = []
           for symbol in symbols:
-              rows.extend(yahoo_chart(symbol, end - timedelta(days=3650), end))
+              try:
+                  rows.extend(historical_bars(symbol, end - timedelta(days=3650), end))
+              except Exception as exc:
+                  failures.append(f'{symbol}: {exc}')
+          if not rows:
+              raise SystemExit('No historical data returned for the configured universe')
           result = chronological_train_test(build_tavan_dataset(pd.DataFrame(rows)))
-          print(json.dumps(result.__dict__ if hasattr(result, '__dict__') else {
-              'train_rows': result.train_rows, 'test_rows': result.test_rows,
-              'test_precision': result.test_precision, 'test_recall': result.test_recall,
-              'coefficients': result.coefficients
-          }, indent=2))
+          print(json.dumps({'universe': len(symbols), 'rows': len(rows), 'failed_symbols': len(failures), 'train_rows': result.train_rows, 'test_rows': result.test_rows, 'test_precision': result.test_precision, 'test_recall': result.test_recall, 'coefficients': result.coefficients}, indent=2))
+          if failures:
+              print('First failures:', *failures[:10], sep='\n')
           PY
