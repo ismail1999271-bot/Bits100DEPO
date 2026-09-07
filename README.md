@@ -21,6 +21,21 @@ Ana hedef, geçmiş BIST tavan olaylarının ortak özelliklerini veriyle keşfe
 9. ML ranking
 10. Telegram 06:00 raporu ve canlı pozisyon izleme
 11. Performans leaderboard'u: 1 gün / 5 gün / aylık momentum ve sıralama değişimi
+12. TEFAS/fon akışı → Smart Money katmanı
+
+## Fon akışı / Smart Money katmanı
+
+`fund_flow.py` ve `smart_money.py` ile kurumsal para akışı sinyali ayrı bir veri katmanı olarak modellenir:
+
+- Fon bazında günlük giriş, çıkış ve net akış tutulur.
+- Fonun kendi geçmişine göre olağandışı akışlar z-score ile işaretlenir; bugünkü gözlem eşik hesabına dahil edilmez.
+- Fon akışı, son bilinen fon portföy ağırlıklarıyla eşleştirilerek **tahmini hisse maruziyeti** (`estimated_flow_try`) hesaplanır.
+- Aynı yöntemle sektör bazında tahmini kurumsal akış çıkarılabilir.
+- Günlük ranking motoru, mevcut piyasa skorunu varsayılan **%20 Smart Money ağırlığıyla** fon akışıyla harmanlayabilir.
+- Güçlü pozitif/negatif tahmini akışlar sırasıyla `smart money accumulation` / `smart money distribution` gerekçesi üretir.
+- Bu hesap gerçek işlem defteri değildir; fon girişinin portföy ağırlıklarıyla oransal dağıtıldığı bir exposure estimate'tir.
+
+Veri kaynağı adapter'ları TEFAS/KAP/vendor verisini bu normalize modele dönüştürür. Canlı veri yokmuş gibi davranılmaz ve portföy tarihleri ile günlük akış tarihleri aynı değilse bu zaman farkı korunur.
 
 ## Performans leaderboard'u
 
@@ -33,7 +48,7 @@ Sosyal medyada görülen “ayın en çok kazandıran hisseleri” formatı proj
 - Yeterli geçmişi olmayan hisseler otomatik dışarıda bırakılır.
 - Bu tablo tek başına al/sat sinyali değildir; sinyal motoruna momentum bağlamı sağlamak için kullanılır.
 
-Bu katman ileride günlük 06:00 raporunda şu formatta kullanılabilir: **Performans Liderleri → Yeni Yükselenler → Momentum İvmesi → Haber/KAP Katalizörü → Smart Money → Tavan Skoru**.
+Bu katman günlük 06:00 raporunda şu formatta kullanılabilir: **Performans Liderleri → Yeni Yükselenler → Momentum İvmesi → Haber/KAP Katalizörü → Smart Money → Tavan Skoru**.
 
 ## Temel KPI'lar
 
@@ -44,6 +59,7 @@ Bu katman ileride günlük 06:00 raporunda şu formatta kullanılabilir: **Perfo
 - Net getiri, expectancy ve P&L
 - Maksimum drawdown
 - Komisyon, spread, slippage ve likidite sonrası performans
+- Smart Money katkısı: pozitif/negatif fon akışı ayrışmasının sinyal precision ve lead time üzerindeki etkisi
 
 Sistem kaliteli fırsat yoksa zorla hisse seçmez ve `NO_QUALITY_SIGNAL` döndürebilir.
 
