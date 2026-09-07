@@ -1,4 +1,4 @@
-"""Leakage-safe Tavan-DNA feature extraction and small logistic model."""
+"""Leakage-safe Tavan-DNA feature extraction and baseline model."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-FEATURES = ("ret1", "ret5", "volume_ratio", "close_location", "range_pct")
+FEATURES = ("ret1", "ret5", "volume_ratio", "close_location", "range_pct", "breakout_20", "volatility_20", "gap")
 
 
 def build_tavan_dataset(frame: pd.DataFrame, limit_pct: float = 0.10) -> pd.DataFrame:
@@ -18,9 +18,12 @@ def build_tavan_dataset(frame: pd.DataFrame, limit_pct: float = 0.10) -> pd.Data
     grouped = df.groupby("symbol", group_keys=False)
     df["ret1"] = grouped["close"].pct_change()
     df["ret5"] = grouped["close"].pct_change(5)
-    df["volume_ratio"] = df["volume"] / grouped["volume"].transform(lambda s: s.shift(1).rolling(20, min_periods=5).mean())
+    df["volume_ratio"] = df["volume"] / grouped["volume"].transform(lambda s: s.shift(1).rolling(20, min_periods=5).mean()).replace(0, np.nan)
     df["close_location"] = (df["close"] - df["low"]) / (df["high"] - df["low"]).replace(0, np.nan)
     df["range_pct"] = (df["high"] - df["low"]) / df["close"].replace(0, np.nan)
+    df["breakout_20"] = df["close"] / grouped["high"].transform(lambda s: s.shift(1).rolling(20, min_periods=5).max()) - 1
+    df["volatility_20"] = grouped["close"].transform(lambda s: s.pct_change().rolling(20, min_periods=10).std())
+    df["gap"] = df["open"] / grouped["close"].shift(1) - 1
     future_high = grouped["high"].shift(-1)
     df["target"] = (future_high >= df["close"] * (1 + limit_pct)).astype(float)
     return df.loc[future_high.notna()].dropna(subset=list(FEATURES)).copy()
@@ -45,6 +48,8 @@ class TavanLogisticModel:
         self.weights_: np.ndarray | None = None
 
     def fit(self, frame: pd.DataFrame) -> "TavanLogisticModel":
+        if frame.empty:
+            raise ValueError("cannot fit on empty dataset")
         x = frame[list(FEATURES)].to_numpy(float)
         y = frame["target"].to_numpy(float)
         self.mean_ = x.mean(axis=0)
@@ -68,6 +73,11 @@ class TavanLogisticModel:
         return 1 / (1 + np.exp(-np.clip(np.c_[np.ones(len(z)), z] @ self.weights_, -30, 30)))
 
 
+def _precision_recall(actual: np.ndarray, predicted: np.ndarray) -> tuple[float, float]:
+    tp = int(np.sum(predicted & actual))
+    return tp / max(1, int(predicted.sum())), tp / max(1, int(actual.sum()))
+
+
 def chronological_train_test(frame: pd.DataFrame, test_fraction: float = 0.2) -> TavanModelResult:
     ordered = frame.sort_values("timestamp")
     if len(ordered) < 2:
@@ -75,10 +85,23 @@ def chronological_train_test(frame: pd.DataFrame, test_fraction: float = 0.2) ->
     cut = max(1, min(len(ordered) - 1, int(len(ordered) * (1 - test_fraction))))
     train, test = ordered.iloc[:cut], ordered.iloc[cut:]
     model = TavanLogisticModel().fit(train)
-    probabilities = model.predict_proba(test)
-    predicted = probabilities >= 0.5
-    actual = test["target"].to_numpy(bool)
-    tp = int(np.sum(predicted & actual))
-    precision = tp / max(1, int(predicted.sum()))
-    recall = tp / max(1, int(actual.sum()))
+    precision, recall = _precision_recall(test["target"].to_numpy(bool), model.predict_proba(test) >= 0.5)
     return TavanModelResult(len(train), len(test), round(float(precision), 6), round(float(recall), 6), tuple(np.round(model.weights_[1:], 6)))
+
+
+def walk_forward_precision(frame: pd.DataFrame, folds: int = 5) -> tuple[float, ...]:
+    """Expanding-window OOS precision; each fold trains strictly before its test window."""
+    ordered = frame.sort_values("timestamp").reset_index(drop=True)
+    if len(ordered) < max(20, folds * 4):
+        raise ValueError("insufficient observations for walk-forward validation")
+    edges = np.linspace(0, len(ordered), folds + 2, dtype=int)
+    scores: list[float] = []
+    for i in range(1, len(edges) - 1):
+        train_end, test_end = edges[i], edges[i + 1]
+        train, test = ordered.iloc[:train_end], ordered.iloc[train_end:test_end]
+        if train.empty or test.empty or train["target"].nunique() < 2:
+            continue
+        model = TavanLogisticModel().fit(train)
+        precision, _ = _precision_recall(test["target"].to_numpy(bool), model.predict_proba(test) >= 0.5)
+        scores.append(round(float(precision), 6))
+    return tuple(scores)
