@@ -1,8 +1,4 @@
-"""Point-in-time opening-auction pressure engine.
-
-This module only consumes provider-supplied observations. It never invents
-order-book values. Missing live fields produce an explicit blocked state.
-"""
+"""Point-in-time opening-auction pressure engine."""
 from dataclasses import dataclass
 from math import isfinite
 
@@ -53,52 +49,25 @@ def _optional_mean(values: list[float | None]) -> float | None:
 
 
 def score_opening_auction(snapshot: AuctionSnapshot) -> AuctionSignal:
-    required = (
-        snapshot.indicative_price,
-        snapshot.reference_price,
-        snapshot.bid_qty,
-        snapshot.ask_qty,
-    )
+    required = (snapshot.indicative_price, snapshot.reference_price, snapshot.bid_qty, snapshot.ask_qty)
     if any(not isfinite(float(v)) for v in required):
-        return AuctionSignal(
-            snapshot.symbol, snapshot.observed_at, "BLOCKED_MISSING_MARKET_DATA",
-            None, None, None, None, None, None, ("missing required auction fields",)
-        )
+        return AuctionSignal(snapshot.symbol, snapshot.observed_at, "BLOCKED_MISSING_MARKET_DATA", None, None, None, None, None, None, ("missing required auction fields",))
     if snapshot.indicative_price <= 0 or snapshot.reference_price <= 0:
-        return AuctionSignal(
-            snapshot.symbol, snapshot.observed_at, "BLOCKED_INVALID_PRICE",
-            None, None, None, None, None, None, ("non-positive price",)
-        )
+        return AuctionSignal(snapshot.symbol, snapshot.observed_at, "BLOCKED_INVALID_PRICE", None, None, None, None, None, None, ("non-positive price",))
 
     total_depth = snapshot.bid_qty + snapshot.ask_qty
     imbalance = ((snapshot.bid_qty - snapshot.ask_qty) / total_depth * 100.0) if total_depth else 0.0
     queue = _bounded(50.0 + imbalance / 2.0)
-
     arrivals = snapshot.order_arrival_buy + snapshot.order_arrival_sell
-    cancels = snapshot.order_cancel_buy + snapshot.order_cancel_sell
-    net = (snapshot.order_arrival_buy - snapshot.order_arrival_sell) - (
-        snapshot.order_cancel_buy - snapshot.order_cancel_sell
-    )
+    cancel_net = snapshot.order_cancel_buy - snapshot.order_cancel_sell
+    net = (snapshot.order_arrival_buy - snapshot.order_arrival_sell) - cancel_net
     flow_score = _bounded(50.0 + (net / arrivals * 50.0 if arrivals else 0.0))
 
-    volume_anomaly = None
-    if snapshot.baseline_volume > 0:
-        volume_anomaly = snapshot.volume / snapshot.baseline_volume
+    volume_anomaly = snapshot.volume / snapshot.baseline_volume if snapshot.baseline_volume > 0 else None
     volume_score = _bounded((volume_anomaly or 1.0) * 50.0)
-
     indicative_change = (snapshot.indicative_price / snapshot.reference_price - 1.0) * 100.0
-    microstructure = _bounded(
-        0.40 * queue + 0.35 * flow_score + 0.15 * volume_score + 0.10 * _bounded(50 + indicative_change * 5)
-    )
-
-    external = _optional_mean([
-        snapshot.tavan_dna,
-        snapshot.kap_score,
-        snapshot.news_score,
-        snapshot.fund_score,
-        snapshot.institutional_score,
-        snapshot.broker_score,
-    ])
+    microstructure = _bounded(0.40 * queue + 0.35 * flow_score + 0.15 * volume_score + 0.10 * _bounded(50 + indicative_change * 5))
+    external = _optional_mean([snapshot.tavan_dna, snapshot.kap_score, snapshot.news_score, snapshot.fund_score, snapshot.institutional_score, snapshot.broker_score])
     score = microstructure if external is None else 0.80 * microstructure + 0.20 * external
 
     reasons: list[str] = []
@@ -108,20 +77,13 @@ def score_opening_auction(snapshot: AuctionSnapshot) -> AuctionSignal:
         reasons.append("strong_sell_imbalance")
     if flow_score >= 65:
         reasons.append("positive_order_flow")
+    if cancel_net < 0:
+        reasons.append("buy_cancel_pressure")
+    elif cancel_net > 0:
+        reasons.append("sell_cancel_pressure")
     if volume_anomaly is not None and volume_anomaly >= 2:
         reasons.append("volume_anomaly")
     if indicative_change >= 5:
         reasons.append("strong_indicative_price")
 
-    return AuctionSignal(
-        snapshot.symbol,
-        snapshot.observed_at,
-        "SIGNAL",
-        round(_bounded(score), 2),
-        round(indicative_change, 4),
-        round(imbalance, 2),
-        round(queue, 2),
-        round(flow_score, 2),
-        None if volume_anomaly is None else round(volume_anomaly, 4),
-        tuple(reasons),
-    )
+    return AuctionSignal(snapshot.symbol, snapshot.observed_at, "SIGNAL", round(_bounded(score), 2), round(indicative_change, 4), round(imbalance, 2), round(queue, 2), round(flow_score, 2), None if volume_anomaly is None else round(volume_anomaly, 4), tuple(reasons))
