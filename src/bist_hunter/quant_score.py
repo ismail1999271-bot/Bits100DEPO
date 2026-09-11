@@ -40,12 +40,14 @@ def calculate_quant_score(
     components: dict[str, float | None],
     *,
     min_score: float = 70.0,
-    min_coverage: float = 0.50,
+    min_coverage: float = 0.40,
 ) -> QuantScore:
     """Combine available point-in-time components with renormalized weights.
 
     Missing components reduce confidence but do not silently become zero.
-    The score is blocked when coverage is below the configured threshold.
+    The default coverage floor permits the two strongest early-session layers
+    (auction + Tavan-DNA = 45% of nominal weight) to produce a research signal,
+    while callers can require stricter coverage for production decisions.
     """
     if not 0.0 < min_coverage <= 1.0:
         raise ValueError("min_coverage must be in (0, 1]")
