@@ -4,7 +4,7 @@ from bist_hunter.walk_forward import final_holdout, walk_forward_splits
 
 
 def test_quant_score_renormalizes_available_components():
-    result = calculate_quant_score({"auction": 90, "tavan_dna": 80})
+    result = calculate_quant_score({"auction": 90, "tavan_dna": 80}, min_coverage=0.40)
     assert result.status == "SIGNAL"
     assert result.score == 84.44
     assert result.confidence == 0.45
