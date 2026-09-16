@@ -1,15 +1,10 @@
-"""Provider-neutral live data gateway for the Bits100 pipeline.
-
-Provider adapters translate licensed vendor payloads into strict normalized
-records. Missing credentials/data remain BLOCKED; no synthetic observations are
-created.
-"""
+"""Provider-neutral live data gateway for the Bits100 pipeline."""
 from dataclasses import dataclass
 import os
 from typing import Any
 
 from .adapters import HttpJsonProvider, ProviderError, parse_json_records
-from .provider_contracts import ContractError, parse_market_observation, validate_unique_keys
+from .provider_contracts import ContractError, parse_market_observation, validate_domain_rows, validate_unique_keys
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,7 +24,7 @@ class LiveDataEnvelope:
 
 
 class LiveDataGateway:
-    """Fetch six real-data domains and enforce point-in-time market integrity."""
+    """Fetch six real-data domains and fail closed on contract violations."""
 
     ENV = {
         "market": "BIST_MARKET_DATA_URL",
@@ -51,32 +46,37 @@ class LiveDataGateway:
         token = os.getenv(f"{env_name}_TOKEN", "").strip()
         if not token:
             raise ProviderError(f"{env_name}_TOKEN is not configured")
-        headers = (("Authorization", f"Bearer {token}"),)
-        return HttpJsonProvider(endpoint, self.timeout_seconds, headers)
+        return HttpJsonProvider(endpoint, self.timeout_seconds, (("Authorization", f"Bearer {token}"),))
 
     def fetch_domain(self, domain: str, params: dict[str, str]) -> list[dict[str, Any]]:
         if domain not in self.ENV:
             raise ProviderError(f"unknown live-data domain: {domain}")
-        payload = self._provider(self.ENV[domain]).fetch(params)
-        return parse_json_records(payload)
+        return parse_json_records(self._provider(self.ENV[domain]).fetch(params))
 
     def _validate_market(self, rows: list[dict[str, Any]], symbol: str) -> list[dict[str, Any]]:
-        if not rows:
-            return []
         normalized = []
         for row in rows:
             try:
                 observation = parse_market_observation(row, max_age_seconds=self.market_max_age_seconds)
+                if observation.symbol != symbol.upper():
+                    raise ContractError("symbol mismatch")
             except ContractError as exc:
                 raise ProviderError(f"MARKET_CONTRACT_BLOCKED: {exc}") from exc
-            if observation.symbol != symbol.upper():
-                raise ProviderError("MARKET_CONTRACT_BLOCKED: symbol mismatch")
             normalized.append(row)
         try:
             validate_unique_keys(normalized, ("symbol", "observed_at"))
         except ContractError as exc:
             raise ProviderError(f"MARKET_CONTRACT_BLOCKED: {exc}") from exc
         return normalized
+
+    def _validate_domains(self, domains: dict[str, list[dict[str, Any]]]) -> None:
+        for domain, rows in domains.items():
+            if domain == "market" or not rows:
+                continue
+            try:
+                validate_domain_rows(domain, rows)
+            except ContractError as exc:
+                raise ProviderError(f"{domain.upper()}_CONTRACT_BLOCKED: {exc}") from exc
 
     def snapshot(self, symbol: str, start: str, end: str, observed_at: str) -> LiveDataEnvelope:
         params = {"symbol": symbol, "start": start, "end": end}
@@ -89,15 +89,7 @@ class LiveDataGateway:
                     raise
                 domains[domain] = []
         domains["market"] = self._validate_market(domains["market"], symbol)
+        self._validate_domains(domains)
         if not domains["market"]:
             raise ProviderError("LIVE_DATA_BLOCKED: market feed unavailable")
-        return LiveDataEnvelope(
-            symbol=symbol,
-            observed_at=observed_at,
-            market=domains["market"],
-            kap=domains["kap"],
-            news=domains["news"],
-            fund_flow=domains["fund_flow"],
-            broker_consensus=domains["broker_consensus"],
-            institutional=domains["institutional"],
-        )
+        return LiveDataEnvelope(symbol, observed_at, domains["market"], domains["kap"], domains["news"], domains["fund_flow"], domains["broker_consensus"], domains["institutional"])
