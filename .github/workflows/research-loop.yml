@@ -7,22 +7,32 @@ on:
 
 jobs:
   research:
-    if: ${{ secrets.OPENAI_API_KEY != '' || secrets.ANTHROPIC_API_KEY != '' }}
     runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      OPENAI_MODEL: gpt-6-astra
+      OPENAI_REASONING_EFFORT: high
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - run: pip install -e '.[agents]'
+      - name: Provider preflight
+        run: |
+          if [ -z "$OPENAI_API_KEY" ] && [ -z "$ANTHROPIC_API_KEY" ]; then
+            printf '%s\n' '# Bits100 Research Loop' '' 'BLOCKED_NO_AI_PROVIDER: configure OPENAI_API_KEY or ANTHROPIC_API_KEY in repository secrets.' > research_loop_report.md
+            echo 'No AI provider secret configured; fail-closed preflight completed.'
+          else
+            echo 'At least one AI provider is configured.'
+          fi
       - name: GPT-6 Astra + Claude -> Quant -> Audit
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_MODEL: gpt-6-astra
-          OPENAI_REASONING_EFFORT: high
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        if: ${{ env.OPENAI_API_KEY != '' || env.ANTHROPIC_API_KEY != '' }}
         run: python scripts/run_research_loop.py
       - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
         with:
           name: bits100-research-loop
           path: research_loop_report.md
+          if-no-files-found: ignore
