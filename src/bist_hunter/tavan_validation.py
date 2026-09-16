@@ -3,9 +3,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import numpy as np
 import pandas as pd
 
-from .quant_validation import validate_returns
+from .quant_validation import ValidationMetrics, validate_returns
 from .tavan_model import TavanLogisticModel, build_tavan_dataset
 
 
@@ -17,7 +18,7 @@ class TavanFold:
     precision: float
     recall: float
     selected_rows: int
-    selected_return_metrics: object
+    selected_return_metrics: ValidationMetrics
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,14 +28,15 @@ class TavanValidationReport:
     final_holdout_precision: float
     final_holdout_recall: float
     final_holdout_selected: int
-    final_holdout_returns: object
+    final_holdout_returns: ValidationMetrics
 
 
-def _metrics(actual: pd.Series, probability, threshold: float):
+def _metrics(actual: pd.Series, probability: np.ndarray, threshold: float):
     predicted = probability >= threshold
-    tp = int((predicted & actual.astype(bool)).sum())
+    actual_bool = actual.astype(bool).to_numpy()
+    tp = int((predicted & actual_bool).sum())
     selected = int(predicted.sum())
-    positives = int(actual.sum())
+    positives = int(actual_bool.sum())
     precision = tp / max(1, selected)
     recall = tp / max(1, positives)
     return precision, recall, predicted
@@ -49,8 +51,8 @@ def run_tavan_walk_forward(
     cost_bps: float = 10.0,
     slippage_bps: float = 5.0,
 ) -> TavanValidationReport:
-    if folds < 3:
-        raise ValueError("at least three walk-forward folds are required")
+    if folds < 3 or not 0.05 <= final_holdout_fraction < 0.40:
+        raise ValueError("use at least 3 folds and a 5%-40% final holdout")
     labeled = build_tavan_dataset(frame).sort_values("timestamp").reset_index(drop=True)
     if len(labeled) < folds * 10 + 30:
         raise ValueError("insufficient observations for expanded walk-forward validation")
@@ -58,15 +60,12 @@ def run_tavan_walk_forward(
     holdout_start = max(folds * 5, min(holdout_start, len(labeled) - 10))
     development = labeled.iloc[:holdout_start]
     holdout = labeled.iloc[holdout_start:]
-    edges = [int(i) for i in pd.Series(range(folds + 1)).map(lambda x: 0)]
-    # Equal chronological test windows with an expanding training prefix.
-    test_edges = [int(v) for v in __import__("numpy").linspace(max(20, len(development) // (folds + 1)), len(development), folds + 1)]
+    first_test_start = max(20, len(development) // (folds + 1))
+    test_edges = [int(v) for v in np.linspace(first_test_start, len(development), folds + 1)]
     fold_reports: list[TavanFold] = []
     for fold in range(folds):
-        train_end = test_edges[fold]
-        test_end = test_edges[fold + 1]
-        train = development.iloc[:train_end]
-        test = development.iloc[train_end:test_end]
+        train_end, test_end = test_edges[fold], test_edges[fold + 1]
+        train, test = development.iloc[:train_end], development.iloc[train_end:test_end]
         if len(test) == 0 or train["target"].nunique() < 2:
             continue
         model = TavanLogisticModel().fit(train)
@@ -75,9 +74,8 @@ def run_tavan_walk_forward(
         next_close = test.groupby("symbol")["close"].shift(-1)
         returns = (next_close / test["close"] - 1).where(selected & next_close.notna()).dropna()
         fold_reports.append(TavanFold(fold + 1, len(train), len(test), round(precision, 6), round(recall, 6), int(selected.sum()), validate_returns(returns.tolist(), cost_bps=cost_bps, slippage_bps=slippage_bps)))
-    if not fold_reports:
-        raise ValueError("no valid walk-forward folds")
-    # The final holdout is fit once using development data and is never used for model selection.
+    if len(fold_reports) < 3:
+        raise ValueError("fewer than three valid walk-forward folds")
     if development["target"].nunique() < 2:
         raise ValueError("development data must contain both target classes")
     final_model = TavanLogisticModel().fit(development)
