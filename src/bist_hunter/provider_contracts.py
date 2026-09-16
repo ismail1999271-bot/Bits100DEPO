@@ -1,10 +1,4 @@
-"""Strict contracts for real provider observations.
-
-The contracts are deliberately vendor-neutral: adapters translate a licensed
-provider schema into these records before data enters the research pipeline.
-Missing required fields, stale timestamps, invalid quantities and duplicate
-observations are rejected rather than silently downgraded to synthetic data.
-"""
+"""Strict point-in-time contracts for real provider observations."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -17,6 +11,13 @@ class ContractError(ValueError):
 
 
 DOMAINS = ("market", "kap", "news", "fund_flow", "broker_consensus", "institutional")
+EVENT_REQUIRED_FIELDS = {
+    "kap": ("symbol", "published_at", "source", "event_id"),
+    "news": ("symbol", "published_at", "source", "event_id"),
+    "fund_flow": ("symbol", "observed_at", "source", "event_id"),
+    "broker_consensus": ("symbol", "published_at", "source", "event_id"),
+    "institutional": ("symbol", "observed_at", "source", "event_id"),
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,7 +77,7 @@ def _optional_nonnegative(row: Mapping[str, Any], name: str) -> float | None:
 
 def parse_timestamp(value: Any) -> datetime:
     if value is None:
-        raise ContractError("missing required field: observed_at")
+        raise ContractError("missing timestamp")
     try:
         parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
     except ValueError as exc:
@@ -114,13 +115,20 @@ def parse_market_observation(row: Mapping[str, Any], *, max_age_seconds: float |
 
 def parse_event_observation(row: Mapping[str, Any], *, timestamp_field: str = "published_at") -> EventObservation:
     published = parse_timestamp(row.get(timestamp_field))
-    return EventObservation(
-        symbol=_text(row, "symbol").upper(),
-        published_at=published.isoformat(),
-        source=_text(row, "source"),
-        event_id=_text(row, "event_id"),
-        payload=dict(row),
-    )
+    return EventObservation(symbol=_text(row, "symbol").upper(), published_at=published.isoformat(), source=_text(row, "source"), event_id=_text(row, "event_id"), payload=dict(row))
+
+
+def validate_domain_rows(domain: str, rows: list[Mapping[str, Any]]) -> None:
+    """Require the normalized minimum contract for every non-market domain."""
+    if domain not in EVENT_REQUIRED_FIELDS:
+        raise ContractError(f"unknown or non-event domain: {domain}")
+    fields = EVENT_REQUIRED_FIELDS[domain]
+    for row in rows:
+        for field in fields:
+            _text(row, field)
+        parse_timestamp(row["published_at"] if "published_at" in fields else row["observed_at"])
+    timestamp_key = "published_at" if "published_at" in fields else "observed_at"
+    validate_unique_keys(rows, ("symbol", timestamp_key, "event_id"))
 
 
 def validate_unique_keys(rows: list[Mapping[str, Any]], keys: tuple[str, ...]) -> None:
