@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from dataclasses import asdict
 from pathlib import Path
 
 from bist_hunter.historical_backtest import load_ohlcv_csv, run_historical_backtest
@@ -25,7 +26,7 @@ def main() -> int:
         "validation_precision": report.validation_precision,
         "holdout_precision": report.holdout_precision,
         "holdout_recall": report.holdout_recall,
-        "holdout_returns": report.holdout_returns.__dict__,
+        "holdout_returns": asdict(report.holdout_returns),
         "status": "VALIDATED",
     }
     output = Path(args.output)
