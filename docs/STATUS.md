@@ -9,13 +9,17 @@ Updated: 2026-09-16
 - Tavan/upper-limit event primitives
 - Leakage-safe Tavan-DNA feature engineering and chronological model training
 - Three-way historical Tavan-DNA backtest runner: train / validation / untouched holdout
+- Expanded Tavan-DNA walk-forward validation with an untouched final holdout
+- E2E Tavan-DNA probability -> Quant Score -> auction trajectory ranking path
 - Cost-aware backtest primitives and chronological walk-forward splits
 - Precision/recall, expectancy, hit-rate, drawdown and risk-adjusted validation primitives
 - Explainable 0-100 candidate scoring with coverage-aware confidence
 - Daily ranking and opening-auction trajectory at 09:40 / 09:45 / 09:50 / 09:55
+- Single BIST100+ universe construction and global scan interface
 - Fund-flow and fund-holding Smart Money exposure proxy
 - Unified opportunity quality gate with manipulation-risk rejection
 - Provider-neutral HTTP adapters for market data, KAP, news and social feeds
+- Strict point-in-time market/event provider contracts and duplicate/staleness rejection
 - Provider readiness matrix that fails closed when endpoints or credentials are missing
 - Institutional data fabric for market, fundamentals, estimates, holdings, flows, research, transactions and alternative data
 - Institutional Consensus across broker/manager views
@@ -24,7 +28,7 @@ Updated: 2026-09-16
 - Performance leaderboard with rank change and momentum acceleration
 - News/event deduplication and source-quality/manipulation controls
 - Market regime / Fear & Greed-style research composite
-- Paper-trading ledger, audit events and hard position/order/loss limits
+- Paper-trading ledger with deterministic spread/slippage execution, audit events and hard limits
 - 06:00-safe morning orchestration and GitHub Actions schedule
 - Claude Technology Scout and GPT-6 Astra research runtimes
 - Scout -> Quant Researcher -> Signal Auditor automated research-loop workflow
@@ -45,9 +49,9 @@ The code is wired for real providers, but credentials and licensed access are ex
 
 ## Validation / training
 
-The repository now contains the complete execution path for real historical training: provider CSV -> validation -> Tavan-DNA features -> chronological train/validation/holdout -> cost-aware holdout metrics. No performance claim is considered valid until this runner is executed on real historical BIST data.
+The repository contains the real historical execution path: provider CSV -> validation -> Tavan-DNA features -> chronological walk-forward -> untouched final holdout -> cost-aware metrics. No performance claim is valid until this runner is executed on real historical BIST data.
 
-The opening-auction layer is likewise fail-closed: missing indicative price/order-book data cannot become a synthetic signal.
+The live auction path is fail-closed: licensed Level-2/2+ observations are validated before entering the 09:40/09:45/09:50/09:55 trajectory. Missing indicative price/order-book data cannot become a synthetic signal.
 
 ## Production gate
 
