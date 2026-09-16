@@ -13,7 +13,7 @@ from pathlib import Path
 import pandas as pd
 
 from .quant_validation import ValidationMetrics, validate_returns
-from .tavan_model import FEATURES, TavanLogisticModel, build_tavan_dataset
+from .tavan_model import TavanLogisticModel, build_tavan_dataset
 
 
 REQUIRED_COLUMNS = {"symbol", "timestamp", "open", "high", "low", "close", "volume"}
@@ -84,8 +84,6 @@ def run_historical_backtest(frame: pd.DataFrame, *, limit_pct: float = 0.10, thr
     holdout_probability = pd.Series(model.predict_proba(holdout), index=holdout.index)
     validation_precision = _precision(validation["target"], validation_probability, threshold)
     holdout_prediction = holdout_probability >= threshold
-    # Entry is made at the current close and exited at the next bar close only
-    # for rows whose next close is available inside the untouched holdout.
     next_close = holdout.groupby("symbol")["close"].shift(-1)
     valid_returns = (next_close / holdout["close"] - 1).where(holdout_prediction & next_close.notna()).dropna()
     metrics = validate_returns(valid_returns.tolist(), cost_bps=10.0, slippage_bps=5.0)
