@@ -1,4 +1,4 @@
-from bist_hunter.paper_trading import PaperBroker, RiskLimits
+from bist_hunter.paper_trading import ExecutionModel, PaperBroker, RiskLimits
 from bist_hunter.scoring import CandidateFeatures
 from bist_hunter.signal_engine import SignalConfig, build_opportunity, rank_opportunities
 
@@ -23,9 +23,21 @@ def test_ranker_does_not_force_low_quality_trade():
 
 
 def test_paper_broker_enforces_position_limit_and_audit():
-    broker = PaperBroker(100_000, RiskLimits(max_position_pct=0.10, max_order_notional_try=20_000))
+    broker = PaperBroker(
+        100_000,
+        RiskLimits(max_position_pct=0.10, max_order_notional_try=20_000),
+        execution=ExecutionModel(spread_bps=0.0, slippage_bps=0.0),
+    )
     assert broker.buy("AAA", 100, 100, "test")
     assert not broker.buy("BBB", 300, 100, "too large")
     assert broker.sell("AAA", 110, "target")
     assert broker.equity_try == 101_000
     assert [x.action for x in broker.audit] == ["BUY", "SELL"]
+
+
+def test_paper_broker_costs_count_against_position_limit():
+    broker = PaperBroker(100_000, RiskLimits(max_position_pct=0.10, max_order_notional_try=20_000))
+    # 100 x 100 mid is exactly at the 10% limit; spread + slippage push the fill above it.
+    assert broker.can_buy("AAA", 100, 100) == (False, "POSITION_SIZE_LIMIT")
+    assert broker.buy("AAA", 99, 100, "fits after costs")
+    assert broker.positions["AAA"].entry_price > 100
