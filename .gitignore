@@ -29,3 +29,5 @@ htmlcov/
 .DS_Store
 Thumbs.db
 *.egg-info/
+artifacts/
+/data/experiments.jsonl

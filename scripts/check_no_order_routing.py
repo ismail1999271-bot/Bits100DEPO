@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SCAN_DIRS = ("src", "scripts")
+SCAN_DIRS = ("src", "scripts", "dashboard")
 FORBIDDEN = re.compile(
     r"\b(create_order|place_order|cancel_order|submit_order|new_order|send_order|"
     r"create_market_order|create_limit_order|order_market|order_limit)\s*\(",
