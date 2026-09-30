@@ -83,6 +83,9 @@ def build_snapshot(
     paper_entries: list[Any] | None = None,
     symbol_details: dict[str, dict[str, Any]] | None = None,
     data_quality: dict[str, Any] | None = None,
+    daily_plan: Any = None,
+    stress: Any = None,
+    overfit: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     ranking_ok = ranking is not None and not ranking.empty
     blocked = int((ranking["Status"] == "BLOCKED").sum()) if ranking_ok else None
@@ -107,6 +110,9 @@ def build_snapshot(
         "paper_trading": _section({"summary": paper_summary, "entries": paper_entries} if paper_summary else None,
                                   "paper ledger empty"),
         "auction": _section(auction, "no auction snapshots"),
+        "daily_plan": _section(daily_plan, "daily plan not built"),
+        "stress_test": _section(stress, "no portfolio / return history for stress test"),
+        "overfit_check": _section(overfit, "no backtest trades for overfitting check"),
         "symbols": _plain(symbol_details or {}),
     }
 

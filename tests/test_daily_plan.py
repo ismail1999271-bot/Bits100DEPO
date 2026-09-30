@@ -22,3 +22,15 @@ def test_plan_uses_ranking_and_calendar():
                                                               {"date": "2026-10-01", "name": "x"}])
     assert plan.watchlist == ("AAA", "CCC") and plan.blocked == ("BBB",)
     assert len(plan.calendar["events"]) == 1
+
+
+def test_snapshot_and_telegram_include_plan():
+    from bist_hunter.dashboard_data import build_snapshot
+    from bist_hunter.telegram_notify import daily_plan_message
+
+    now = datetime(2026, 9, 30, 7, 0, tzinfo=timezone.utc)
+    plan = build_daily_plan(now)
+    snap = build_snapshot(now=now, daily_plan=plan)
+    assert snap["daily_plan"]["status"] == "OK"
+    assert snap["stress_test"]["status"] == "MISSING" and snap["overfit_check"]["status"] == "MISSING"
+    assert "[DAILY_REPORT]" in daily_plan_message(format_plan(plan))

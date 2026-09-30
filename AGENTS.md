@@ -31,3 +31,7 @@ Real data `provider_status.py`/`market_contracts.py` → validation `fail_closed
 `quant_score.py` → ranking/risk `research_ranking.py`, `risk.py` → backtest `e2e_backtest.py`,
 `portfolio_backtest.py` → paper `paper_ledger.py` → dashboard `dashboard_data.py`, `dashboard/app.py`
 → Telegram `telegram_notify.py`. Orchestrator: `research_run.py`. Experiments: `experiments.py`.
+
+Extended research modules (Phase 13): `tavan_risk.py` (hard blocks, wired in `research_run.py`),
+`scenarios.py`, `event_study.py`, `trade_review.py`, `stress_test.py`, `overfit.py`, `daily_plan.py`.
+Each returns MISSING/BLOCKED rather than estimating absent data; none routes orders.

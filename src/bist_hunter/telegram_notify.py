@@ -50,6 +50,10 @@ def signal_report(ranking: pd.DataFrame, *, top: int = 10, universe_label: str =
     return format_message("SIGNAL_REPORT", "Günlük araştırma sıralaması", "\n".join(lines))
 
 
+def daily_plan_message(plan_text: str) -> str:
+    return format_message("DAILY_REPORT", "Günlük plan", plan_text)
+
+
 def system_status(statuses) -> str:
     body = "\n".join(f"{ICON.get(s.status, '')} {s.label}: {s.status}" for s in statuses)
     return format_message("SYSTEM_STATUS", "Veri sağlayıcı durumu", body)

@@ -41,7 +41,7 @@ def main() -> None:
     snap = json.loads(path.read_text(encoding="utf-8"))
     st.caption(snap["disclaimer"] + f" · Oluşturma: {snap['generated_at']}")
 
-    tab_main, tab_symbol = st.tabs(["Ana ekran", "Hisse detayı"])
+    tab_main, tab_symbol, tab_plan = st.tabs(["Ana ekran", "Hisse detayı", "Plan / Risk"])
     with tab_main:
         c1, c2, c3 = st.columns(3)
         ms = snap["market_status"]
@@ -78,6 +78,23 @@ def main() -> None:
                 st.dataframe(pd.DataFrame(paper["data"]["entries"]), use_container_width=True)
         else:
             st.info(paper["reason"])
+
+    with tab_plan:
+        plan = snap.get("daily_plan", {"status": "MISSING", "reason": "no daily plan"})
+        if plan["status"] == "OK":
+            d = plan["data"]
+            st.subheader(f"Günlük Plan {d['date']}")
+            for item in d["items"]:
+                st.write(f"{'✅' if item['done'] else '⬜'} {item['at']} — {item['text']}")
+            st.write("İzleme listesi:", ", ".join(d["watchlist"]) or "YOK")
+            if d["blocked"]:
+                st.write("Engelli:", ", ".join(d["blocked"]))
+        else:
+            st.info(plan["reason"])
+        _table(snap.get("stress_test", {"status": "MISSING", "reason": "no stress test"}), "Portföy Stres Testi")
+        ov = snap.get("overfit_check", {"status": "MISSING", "reason": "no overfit check"})
+        st.subheader("Aşırı Uyum Kontrolü")
+        st.json(ov["data"]) if ov["status"] == "OK" else st.info(ov["reason"])
 
     with tab_symbol:
         symbols = sorted(snap.get("symbols", {}))
