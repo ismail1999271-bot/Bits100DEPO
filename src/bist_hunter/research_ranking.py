@@ -14,6 +14,7 @@ import pandas as pd
 from .fail_closed import GateInput, evaluate_gate
 from .quant_score import calculate_quant_score
 from .risk import RiskInputs, assess_risk
+from .tavan_risk import TavanRisk
 from .universe import Universe
 
 DISCLAIMER = "Araştırma sıralamasıdır; kesin gelecek tahmini veya yatırım tavsiyesi değildir. Otomatik emir yoktur."
@@ -29,6 +30,7 @@ class SymbolResearch:
     quality: dict[str, float] | None = None
     relative_volume: float | None = None
     risk: RiskInputs | None = None
+    tavan_risk: TavanRisk | None = None
 
 
 def rank_research(
@@ -56,11 +58,15 @@ def rank_research(
         reasons = list(gate.reasons) + list(score.reasons)
         if risk is not None:
             reasons += list(risk.reasons)
-        status = "BLOCKED" if not gate.passed else score.status
+        tavan = item.tavan_risk
+        if tavan is not None:
+            reasons += [f"BLOCK:{b}" for b in tavan.block_reasons] + list(tavan.warnings)
+        blocked = (not gate.passed) or (tavan is not None and tavan.status == "BLOCKED")
+        status = "BLOCKED" if blocked else score.status
         rows.append({
             "Symbol": symbol,
             "Status": status,
-            "Quant Score": score.score if gate.passed else None,
+            "Quant Score": None if blocked else score.score,
             "Coverage": score.coverage,
             "Confidence": score.confidence,
             "Tavan-DNA": score.component("tavan_dna"),
@@ -75,7 +81,7 @@ def rank_research(
             "Target": None if risk is None else risk.target_reference,
             "R/R": None if risk is None else risk.risk_reward,
             "Reasons": ", ".join(dict.fromkeys(reasons)),
-            "_sort": (0 if gate.passed else 1, -(score.score if gate.passed else 0.0)),
+            "_sort": (1 if blocked else 0, 0.0 if blocked else -score.score),
         })
     table = pd.DataFrame(rows)
     table = table.sort_values("_sort", kind="stable").drop(columns="_sort")
