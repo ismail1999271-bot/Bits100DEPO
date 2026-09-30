@@ -24,3 +24,11 @@ jobs:
         run: ruff check .
       - name: Production guard
         run: python scripts/check_no_order_routing.py
+      - name: Telegram CI status (outbound only, skipped without secrets)
+        if: always()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          python -c "import os; from bist_hunter.telegram_notify import ci_status, notify; print('sent' if notify(ci_status(os.environ['GITHUB_REF_NAME'], os.environ['GITHUB_SHA'], os.environ['JOB_STATUS']=='success')) else 'telegram not configured')" || true
