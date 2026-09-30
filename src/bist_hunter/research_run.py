@@ -24,6 +24,7 @@ from .fail_closed import GateInput
 from .provider_status import CONNECTED, ProviderClient, ProviderStatus, signals_allowed, status_board
 from .research_ranking import SymbolResearch, rank_research
 from .risk import RiskInputs
+from .tavan_risk import TavanRiskInputs, assess_tavan_risk, closes_from_frame
 from .tavan_model import FEATURES, TavanLogisticModel, build_tavan_dataset
 from .technical import add_technical_features, technical_score
 from .universe import load_bist100_plus_universe
@@ -120,6 +121,7 @@ def run_research(
                       provider_statuses={d: s.status for d, s in board.items()}),
             comps,
             relative_volume=None if pd.isna(row["relative_volume"]) else float(row["relative_volume"]),
+            tavan_risk=assess_tavan_risk(TavanRiskInputs(symbol, now, daily_closes=closes_from_frame(frame, symbol))),
             risk=RiskInputs(last_price=float(row["close"]), atr=None if pd.isna(row["atr_14"]) else float(row["atr_14"]),
                             support=None if pd.isna(row["support_20"]) else float(row["support_20"]),
                             reference_close=float(row["close"]), avg_daily_value_try=adv),

@@ -34,3 +34,19 @@ python scripts/build_dashboard_snapshot.py && streamlit run dashboard/app.py
 python -c "from bist_hunter.research_run import run_research; print(run_research().status)"
 python scripts/ollama_task.py "<task>" --files <paths>   # local Ollama proposes a patch
 ```
+
+## Phase 13 – Extended research modules (overnight build)
+
+All modules are research-only, fail-closed, and return MISSING/BLOCKED instead of estimating absent data.
+
+| Module | Purpose | Data needed (else MISSING) |
+|---|---|---|
+| `tavan_risk.py` | VBTS/halt/IPO lock-up hard blocks, limit-up streak, lock strength, manipulation risk; wired into ranking (BLOCKED ranks last) | VBTS, trading state, L2 queue, free float (provider) |
+| `technical.py` + `scenarios.py` | Weekly timeframe, bull/base/bear scenarios with invalidation levels | Real OHLCV |
+| `event_study.py` | Historical price impact per event type, run-up / "priced in" ratio, INSUFFICIENT_SAMPLE gate | Real KAP/news history + OHLCV |
+| `trade_review.py` | FIFO round trips; CHASE/EARLY_EXIT/OVERSIZED/REVENGE/STOP/OVERTRADING flags; process vs outcome | Paper ledger or user trade log |
+| `stress_test.py` | Concentration, sector exposure, correlation, beta-based XU100 shocks | Return history + XU100 |
+| `overfit.py` | Deflated Sharpe, regime performance, parameter sensitivity, verdict | Backtest trades (REAL provenance) |
+| `daily_plan.py` | 06:00 → 18:10 routine, watchlist, calendar (MISSING without provider) | Ranking, economic calendar |
+
+Still open: analyst-consensus "expectation surprise" (no provider), dashboard/Telegram panels for the new modules, real provider credentials.
