@@ -13,6 +13,8 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("csv", help="UTF-8 CSV with symbol,timestamp,open,high,low,close,volume")
     parser.add_argument("--output", default="artifacts/tavan_backtest/latest.json")
+    parser.add_argument("--provenance", default="UNVERIFIED",
+                        help="REAL only for licensed historical BIST data; anything else is not evidence")
     args = parser.parse_args()
     frame = load_ohlcv_csv(args.csv)
     report = run_historical_backtest(frame)
@@ -27,7 +29,8 @@ def main() -> int:
         "holdout_precision": report.holdout_precision,
         "holdout_recall": report.holdout_recall,
         "holdout_returns": asdict(report.holdout_returns),
-        "status": "VALIDATED",
+        "provenance": args.provenance.upper(),
+        "status": "VALIDATED_ON_REAL_DATA" if args.provenance.upper() == "REAL" else "NOT_PERFORMANCE_EVIDENCE",
     }
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
