@@ -14,6 +14,7 @@ import pandas as pd
 from .auction_trajectory import AuctionTrajectory, build_trajectory
 from .quant_score import QuantScore, calculate_quant_score
 from .tavan_model import TavanLogisticModel, build_tavan_dataset
+from .walk_forward import purged_date_split
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,12 +54,12 @@ def run_e2e_backtest(
     labeled = build_tavan_dataset(frame)
     if len(labeled) < 30:
         raise ValueError("at least 30 labeled observations are required")
-    ordered = labeled.sort_values("timestamp").reset_index(drop=True)
-    train_end = max(1, int(len(ordered) * train_fraction))
-    validation_end = max(train_end + 1, int(len(ordered) * (train_fraction + validation_fraction)))
-    validation_end = min(validation_end, len(ordered) - 1)
-    train = ordered.iloc[:train_end]
-    holdout = ordered.iloc[validation_end:]
+    ordered = labeled.sort_values(["timestamp", "symbol"]).reset_index(drop=True)
+    split = purged_date_split(
+        ordered["timestamp"], train_fraction=train_fraction, validation_fraction=validation_fraction
+    )
+    train = ordered[ordered["timestamp"].isin(split.train_dates)]
+    holdout = ordered[ordered["timestamp"].isin(split.holdout_dates)]
     if train["target"].nunique() < 2:
         raise ValueError("training data must contain both target classes")
     model = TavanLogisticModel().fit(train)
@@ -75,7 +76,7 @@ def run_e2e_backtest(
         score = calculate_quant_score(components, min_coverage=0.20)
         points = trajectory_points.get(symbol, [])
         trajectory = build_trajectory(symbol, points)
-        if score.status == "SIGNAL" and trajectory.status != "BLOCKED":
+        if score.status == "SIGNAL" and not trajectory.status.startswith("BLOCKED"):
             output.append(E2ECandidate(symbol, row["timestamp"].isoformat(), probability, score, trajectory))
     output.sort(key=lambda item: (item.quant_score.score, item.quant_score.confidence), reverse=True)
     return tuple(output)
