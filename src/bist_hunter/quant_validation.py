@@ -17,6 +17,7 @@ class ValidationMetrics:
     sharpe: float | None
     sortino: float | None
     profit_factor: float | None
+    total_return: float = 0.0
 
 
 def _clean(values: list[float]) -> list[float]:
@@ -56,4 +57,5 @@ def validate_returns(returns: list[float], cost_bps: float = 0.0, slippage_bps: 
         sharpe,
         sortino,
         profit_factor,
+        equity - 1.0,
     )
