@@ -1,4 +1,4 @@
-"""Point-in-time technical, volume and momentum features on 1D/4H/1H/15M/5M bars.
+"""Point-in-time technical, volume and momentum features on 1W/1D/4H/1H/15M/5M bars.
 
 Every indicator at row *t* uses only bars <= *t* (rolling / ewm / shift(1)
 windows). Intraday bars are resampled into higher timeframes and the last,
@@ -12,7 +12,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-TIMEFRAMES = {"5M": "5min", "15M": "15min", "1H": "1h", "4H": "4h", "1D": "1D"}
+TIMEFRAMES = {"5M": "5min", "15M": "15min", "1H": "1h", "4H": "4h", "1D": "1D", "1W": "7D"}
 FEATURE_COLUMNS = (
     "rsi_14", "macd", "macd_signal", "macd_hist", "ema_20", "sma_50", "atr_14", "adx_14", "vwap",
     "relative_volume", "volume_acceleration", "momentum_10", "volume_momentum", "volatility_20",
@@ -28,9 +28,17 @@ def resample_bars(frame: pd.DataFrame, timeframe: str, *, as_of: pd.Timestamp | 
     out = []
     for symbol, g in frame.sort_values("timestamp").groupby("symbol"):
         g = g.set_index(pd.to_datetime(g["timestamp"]))
-        agg = g.resample(rule, label="left", closed="left").agg(
-            {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
-        ).dropna(subset=["open", "close"])
+        if timeframe == "1W":
+            # Calendar weeks starting Monday 00:00 (BIST trades Mon-Fri).
+            week_start = g.index.normalize() - pd.to_timedelta(g.index.weekday, unit="D")
+            agg = g.groupby(week_start).agg(
+                {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
+            ).dropna(subset=["open", "close"])
+            agg.index.name = None
+        else:
+            agg = g.resample(rule, label="left", closed="left").agg(
+                {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
+            ).dropna(subset=["open", "close"])
         if as_of is not None:
             end = agg.index + pd.Timedelta(rule)
             agg = agg[end <= as_of]
@@ -117,20 +125,20 @@ def add_technical_features(frame: pd.DataFrame, *, intraday: bool | None = None)
     data = frame.copy()
     data["timestamp"] = pd.to_datetime(data["timestamp"])
     if intraday is None:
-        intraday = "timeframe" in data.columns and str(data["timeframe"].iloc[0]) != "1D"
+        intraday = "timeframe" in data.columns and str(data["timeframe"].iloc[0]) not in ("1D", "1W")
     parts = [_per_symbol(g, intraday) for _, g in data.groupby("symbol", sort=False)]
     return pd.concat(parts).sort_values(["symbol", "timestamp"]).reset_index(drop=True)
 
 
 def multi_timeframe_features(intraday: pd.DataFrame, as_of: pd.Timestamp,
-                             timeframes: tuple[str, ...] = ("5M", "15M", "1H", "4H", "1D")) -> pd.DataFrame:
+                             timeframes: tuple[str, ...] = ("5M", "15M", "1H", "4H", "1D", "1W")) -> pd.DataFrame:
     """Latest complete-bar features per symbol and timeframe as of ``as_of``."""
     rows = []
     for tf in timeframes:
         bars = resample_bars(intraday, tf, as_of=as_of)
         if bars.empty:
             continue
-        feats = add_technical_features(bars, intraday=tf != "1D")
+        feats = add_technical_features(bars, intraday=tf not in ("1D", "1W"))
         latest = feats.groupby("symbol").tail(1)
         rows.append(latest.assign(timeframe=tf))
     if not rows:

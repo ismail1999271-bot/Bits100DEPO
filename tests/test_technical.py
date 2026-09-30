@@ -67,3 +67,15 @@ def test_feature_usefulness_ic():
     assert good.mean_ic > 0.9
     noise = feature_usefulness(feats, "rsi_14")
     assert noise.observations > 0 and abs(noise.mean_ic) < 0.5
+
+
+def test_weekly_timeframe_drops_incomplete_week():
+    bars = intraday(days=12)  # Mon 2026-09-07 .. Fri 09-18 + weekend days (synthetic calendar days)
+    as_of = pd.Timestamp("2026-09-16 12:00")
+    weekly = resample_bars(bars, "1W", as_of=as_of)
+    assert set(weekly["timeframe"]) == {"1W"}
+    assert weekly["timestamp"].max() == pd.Timestamp("2026-09-07")  # week of 09-14 not complete yet
+    assert (weekly["timestamp"].dt.weekday == 0).all()
+    first = weekly[(weekly["symbol"] == "AAA")].iloc[0]
+    day = bars[(bars["symbol"] == "AAA") & (bars["timestamp"] < pd.Timestamp("2026-09-14"))]
+    assert first["high"] == day["high"].max() and first["volume"] == day["volume"].sum()
