@@ -5,6 +5,7 @@ import pandas as pd
 
 from .institutional_intelligence import InstitutionalWeights, build_institutional_score
 from .technical_watchlist import add_risk_reward
+from .universe import Universe
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,8 +39,27 @@ def add_features(frame: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
-def rank_latest(frame: pd.DataFrame, config: RankingConfig = RankingConfig()) -> pd.DataFrame:
-    """Rank latest observations and optionally incorporate broker technical risk/reward data."""
+def restrict_to_universe(frame: pd.DataFrame, universe: Universe) -> pd.DataFrame:
+    """Drop rows outside the single BIST100+ universe (symbols normalized to upper case)."""
+    members = set(universe.symbols)
+    symbols = frame["symbol"].astype(str).str.upper().str.removesuffix(".IS")
+    result = frame.loc[symbols.isin(members)].copy()
+    result["symbol"] = symbols[symbols.isin(members)]
+    return result
+
+
+def rank_latest(
+    frame: pd.DataFrame,
+    config: RankingConfig = RankingConfig(),
+    universe: Universe | None = None,
+) -> pd.DataFrame:
+    """Rank latest observations and optionally incorporate broker technical risk/reward data.
+
+    When ``universe`` is given only its members are ranked, so every pipeline
+    that shares the universe object ranks exactly the same symbol set.
+    """
+    if universe is not None:
+        frame = restrict_to_universe(frame, universe)
     enriched = add_features(frame)
     latest = enriched.sort_values("timestamp").groupby("symbol", as_index=False).tail(1)
     institutional_columns = {

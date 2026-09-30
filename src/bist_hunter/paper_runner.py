@@ -11,7 +11,8 @@ import pandas as pd
 from .daily_ranker import rank_latest
 from .paper_performance import PaperPerformanceLedger
 from .paper_trading import RiskLimits
-from .real_adapters import historical_bars, load_symbol_universe
+from .real_adapters import historical_bars
+from .universe import load_bist100_plus_universe
 
 
 def _state_path() -> Path:
@@ -32,7 +33,8 @@ def _save_state(state: dict[str, object]) -> None:
 
 
 def run_paper_session(top_k: int = 5) -> dict[str, float]:
-    symbols = load_symbol_universe()
+    universe = load_bist100_plus_universe()
+    symbols = list(universe.symbols)
     today = datetime.now(UTC).date()
     rows: list[dict[str, object]] = []
     for symbol in symbols:
@@ -40,7 +42,7 @@ def run_paper_session(top_k: int = 5) -> dict[str, float]:
     frame = pd.DataFrame(rows)
     if frame.empty:
         raise RuntimeError("paper session received no historical rows")
-    ranked = rank_latest(frame)
+    ranked = rank_latest(frame, universe=universe)
     state = _load_state()
     positions = dict(state.get("positions", {}))
     initial = float(os.getenv("PAPER_INITIAL_EQUITY_TRY", "5000000"))

@@ -9,8 +9,9 @@ import pandas as pd
 
 from .adapters import ProviderError
 from .daily_ranker import rank_latest
-from .real_adapters import fetch_fund_flow, fetch_kap_disclosures, fetch_news_rss, historical_bars, load_symbol_universe
+from .real_adapters import fetch_fund_flow, fetch_kap_disclosures, fetch_news_rss, historical_bars
 from .telegram_report import send_message
+from .universe import load_bist100_plus_universe
 
 BULLISH_TERMS = ("yatırım", "sözleşme", "sipariş", "kar", "kâr", "temettü", "geri alım", "ihale")
 BEARISH_TERMS = ("zarar", "iflas", "dava", "soruşturma", "sermaye artırımı")
@@ -63,7 +64,8 @@ def _fund_scores(rows: list[dict[str, object]]) -> dict[str, float]:
 
 def run_real_morning(as_of: date | None = None, *, send_telegram: bool = False) -> str:
     day = as_of or datetime.now(UTC).date()
-    symbols = load_symbol_universe()
+    universe = load_bist100_plus_universe(day)
+    symbols = list(universe.symbols)
     frame = _collect_market(symbols, day - timedelta(days=90), day)
     kap_rows = fetch_kap_disclosures(day - timedelta(days=1), day) if os.getenv("KAP_API_URL") else []
     fund_rows = fetch_fund_flow(day - timedelta(days=1), day) if os.getenv("FUND_FLOW_API_URL") else []
@@ -72,7 +74,7 @@ def run_real_morning(as_of: date | None = None, *, send_telegram: bool = False) 
     frame["smart_money_score"] = frame["symbol"].str.upper().map(_fund_scores(fund_rows))
     frame["fundamental_score"] = frame["symbol"].str.upper().map(_event_scores(kap_rows, ("title", "text")))
     frame["research_score"] = frame["symbol"].str.upper().map(_event_scores(news_rows, ("title", "description")))
-    ranked = rank_latest(frame)
+    ranked = rank_latest(frame, universe=universe)
     lines = ["🌅 BITS100 — 06:00 GERÇEK VERİ", f"Evren: {len(symbols)} | OHLCV satırı: {len(frame)}"]
     if ranked.empty:
         lines.append("🔴 BUGÜN KALİTELİ TAVAN SİNYALİ YOK.")
