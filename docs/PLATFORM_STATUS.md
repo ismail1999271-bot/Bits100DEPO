@@ -50,3 +50,14 @@ All modules are research-only, fail-closed, and return MISSING/BLOCKED instead o
 | `daily_plan.py` | 06:00 → 18:10 routine, watchlist, calendar (MISSING without provider) | Ranking, economic calendar |
 
 Still open: analyst-consensus "expectation surprise" (no provider), dashboard/Telegram panels for the new modules, real provider credentials.
+
+## Phase 14 – Competitor-informed additions
+
+| Module | Purpose | Notes |
+|---|---|---|
+| `borsapy_adapter.py` | Optional OHLCV backend (`BIST_DATA_BACKEND=borsapy`) | ~15 dk gecikmeli, kişisel/eğitim lisansı; canlı kullanım için ayrı BIST veri lisansı. Bulut ortamında erişilemediği için yalnız sahte Ticker ile test edildi; gerçek çağrı kullanıcının makinesinde denenmeli. Oturum açık iken bugünün yarım mumu düşürülür. |
+| `news_classifier.py` | İki aşamalı haber/KAP sınıflandırma + piyasa bypass | LLM isteğe bağlı (`llm(prompt)->str`), yalnızca katı JSON şeması geçerse kabul; aksi halde kural tabanlı. Bypass aktifse tüm sıralama BLOCKED (MARKET_BYPASS). |
+| `scan_presets.py` | 7 hazır tarama (hacim, kırılım, trend…) | Yalnız aday havuzunu daraltır; sinyal/skor üretmez. |
+| `telegram_notify.SignalChangeTracker` | Yalnızca durum değişince bildirim | Bozuk state dosyası çökertmez. |
+| `chart_analysis.py` | Mum grafiği, EMA/SMA, Bollinger, destek/direnç, formasyon, RSI/MACD | Pivotlar sağdan `confirm` bar ile doğrulanır (sızıntı yok); formasyonlar tahmin değildir. Dashboard "Hisse detayı" içinde. |
+| `scripts/run_daily.py`, `Dockerfile`, `docker-compose.yml`, `daily-research.yml` | Günlük çalıştırma / konteyner | Sağlayıcı yoksa BLOCKED snapshot üretir. |

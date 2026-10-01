@@ -35,3 +35,4 @@ Real data `provider_status.py`/`market_contracts.py` → validation `fail_closed
 Extended research modules (Phase 13): `tavan_risk.py` (hard blocks, wired in `research_run.py`),
 `scenarios.py`, `event_study.py`, `trade_review.py`, `stress_test.py`, `overfit.py`, `daily_plan.py`.
 Each returns MISSING/BLOCKED rather than estimating absent data; none routes orders.
+Phase 14: `borsapy_adapter.py`, `news_classifier.py`, `scan_presets.py`, `chart_analysis.py`, `scripts/run_daily.py`.

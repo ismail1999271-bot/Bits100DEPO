@@ -1,0 +1,30 @@
+name: Daily research run
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "10 15 * * 1-5"   # 18:10 Istanbul, weekdays; holidays are not checked
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    env:
+      BIST_MARKET_DATA_URL: ${{ secrets.BIST_MARKET_DATA_URL }}
+      BIST_MARKET_DATA_URL_TOKEN: ${{ secrets.BIST_MARKET_DATA_URL_TOKEN }}
+      BIST_DATA_BACKEND: ${{ vars.BIST_DATA_BACKEND }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e '.[charts,borsapy]'
+      - run: python scripts/run_daily.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: research-snapshot
+          path: artifacts/dashboard

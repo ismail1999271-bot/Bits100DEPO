@@ -19,7 +19,9 @@ def _snapshot_path() -> Path:
     args = sys.argv[1:]
     if "--snapshot" in args:
         return Path(args[args.index("--snapshot") + 1])
-    return Path("artifacts/dashboard/snapshot.json")
+    import os
+
+    return Path(os.environ.get("BITS100_SNAPSHOT", "artifacts/dashboard/snapshot.json"))
 
 
 def _table(section: dict, title: str) -> None:
@@ -103,6 +105,17 @@ def main() -> None:
             return
         choice = st.selectbox("Hisse", symbols)
         detail = snap["symbols"][choice]
+        chart = detail.get("Chart")
+        if chart and chart.get("status") == "OK":
+            st.subheader("Grafik analizi")
+            img = chart.get("image")
+            if img and Path(img).exists():
+                st.image(img, use_container_width=True)
+            st.write("Destek:", chart["supports"] or "—", "· Direnç:", chart["resistances"] or "—")
+            st.write("Formasyonlar:", ", ".join(p["label"] for p in chart["patterns"]) or "belirgin yok")
+            st.caption("Formasyonlar geçmişi tanımlar; tahmin veya tavsiye değildir.")
+        elif chart:
+            st.info(chart.get("reason", "grafik yok"))
         for key in ("Price", "Auction", "Order Book", "Technical", "Tavan-DNA", "KAP", "News", "Fund",
                     "Institutional", "Broker", "Quant Score", "Backtest", "Risk"):
             with st.expander(key, expanded=key in ("Quant Score", "Auction")):

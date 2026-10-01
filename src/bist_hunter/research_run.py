@@ -51,6 +51,8 @@ def run_research(
     client: ProviderClient | None = None,
     history_days: int = 400,
     max_market_age_seconds: float = 26 * 3600,
+    chart_dir: str | None = None,
+    chart_top: int = 10,
 ) -> ResearchRun:
     now = now or datetime.now(timezone.utc)
     client = client or ProviderClient()
@@ -130,7 +132,15 @@ def run_research(
                             reference_close=float(row["close"]), avg_daily_value_try=adv),
         ))
     ranking = rank_research(universe, items, bypass=bypass)
-    snapshot = build_snapshot(now=now, universe=universe, provider_statuses=tuple(board.values()), ranking=ranking)
+    details: dict[str, dict] = {}
+    if chart_dir is not None:
+        from .chart_analysis import build_charts
+
+        have = set(frame["symbol"])  # charts are descriptive, so BLOCKED symbols with data are charted too
+        top = [str(x) for x in ranking["Symbol"] if x in have][:chart_top]
+        details = {sym: {"Chart": rep} for sym, rep in build_charts(frame, top, chart_dir).items()}
+    snapshot = build_snapshot(now=now, universe=universe, provider_statuses=tuple(board.values()), ranking=ranking,
+                              symbol_details=details)
     return ResearchRun("OK", "ranked", tuple(board.values()), ranking, snapshot)
 
 
