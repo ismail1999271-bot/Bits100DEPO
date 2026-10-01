@@ -67,3 +67,45 @@ def ci_status(branch: str, sha: str, passed: bool, details: str = "") -> str:
 def notify(text: str, *, sender: Callable[[str], bool] = send_message) -> bool:
     """Send (possibly chunked) text. Returns False when Telegram is not configured."""
     return all(sender(chunk) for chunk in _chunks(text))
+
+
+class SignalChangeTracker:
+    """Notify only when a symbol's status changes (no repeated identical alerts).
+
+    State is a plain JSON file {symbol: status}. First sight of a symbol counts as a change.
+    """
+
+    def __init__(self, path: str | None = None) -> None:
+        import json
+        from pathlib import Path
+
+        self._json = json
+        self._path = Path(path) if path else None
+        self.state: dict[str, str] = {}
+        if self._path is not None and self._path.exists():
+            try:
+                self.state = {str(k): str(v) for k, v in json.loads(self._path.read_text("utf-8")).items()}
+            except (ValueError, OSError):
+                self.state = {}  # corrupt state -> treat everything as new, never crash
+
+    def changes(self, ranking: pd.DataFrame) -> list[tuple[str, str | None, str]]:
+        out = []
+        for _, row in ranking.iterrows():
+            symbol, status = str(row["Symbol"]), str(row["Status"])
+            previous = self.state.get(symbol)
+            if previous != status:
+                out.append((symbol, previous, status))
+            self.state[symbol] = status
+        return out
+
+    def save(self) -> None:
+        if self._path is not None:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            self._path.write_text(self._json.dumps(self.state, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def change_report(changes: list[tuple[str, str | None, str]], *, only_to: tuple[str, ...] = ("SIGNAL", "BLOCKED")) -> str | None:
+    lines = [f"{s}: {old or 'yeni'} → {new}" for s, old, new in changes if new in only_to]
+    if not lines:
+        return None
+    return format_message("ALERT", "Durum değişikliği", "\n".join(lines[:40]))

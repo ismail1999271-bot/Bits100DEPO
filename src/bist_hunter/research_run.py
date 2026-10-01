@@ -21,6 +21,7 @@ from .event_features import (
     quant_components,
 )
 from .fail_closed import GateInput
+from .news_classifier import classify_events, market_bypass, news_score
 from .provider_status import CONNECTED, ProviderClient, ProviderStatus, signals_allowed, status_board
 from .research_ranking import SymbolResearch, rank_research
 from .risk import RiskInputs
@@ -83,6 +84,8 @@ def run_research(
         board[s.domain] = s
     kap_events = deduplicate(normalize_kap([dict(e.payload) for e in kap_raw]))
     news_events = deduplicate(normalize_news([dict(e.payload) for e in news_raw]))
+    news_classes = classify_events(news_events + kap_events, now)
+    bypass = market_bypass(news_events, now)
 
     # Tavan-DNA: fit on labelled history strictly before today, score today's rows.
     labeled = build_tavan_dataset(frame)
@@ -109,7 +112,7 @@ def run_research(
             comps["tavan_dna"] = probabilities[symbol] * 100
         comps.update(quant_components(
             kap=event_score(kap_events, symbol, now) if kap_events else None,
-            news=event_score(news_events, symbol, now) if news_events else None,
+            news=_news_component(news_events, news_classes, symbol, now),
             broker=broker_features(broker_rows, symbol, now) if broker_rows else None,
             institutional=institutional_features(inst_rows, symbol, now) if inst_rows else None,
         ))
@@ -126,7 +129,7 @@ def run_research(
                             support=None if pd.isna(row["support_20"]) else float(row["support_20"]),
                             reference_close=float(row["close"]), avg_daily_value_try=adv),
         ))
-    ranking = rank_research(universe, items)
+    ranking = rank_research(universe, items, bypass=bypass)
     snapshot = build_snapshot(now=now, universe=universe, provider_statuses=tuple(board.values()), ranking=ranking)
     return ResearchRun("OK", "ranked", tuple(board.values()), ranking, snapshot)
 
@@ -149,3 +152,14 @@ def _tavan_features_last_bar(frame: pd.DataFrame) -> pd.DataFrame:
     last_ts = frame.groupby("symbol")["timestamp"].max()
     built = built[built.apply(lambda r: pd.Timestamp(r["timestamp"]) == pd.Timestamp(last_ts[r["symbol"]]), axis=1)]
     return built[["symbol", "timestamp", *FEATURES]]
+
+
+def _news_component(news_events, news_classes, symbol, now):
+    """Classifier-based news score when it has evidence, else the keyword baseline."""
+    if not news_events:
+        return None
+    score = news_score(news_classes, symbol)
+    if score is not None:
+        from .event_features import EventScore, OK
+        return EventScore(symbol, OK, score, sum(c.symbol == symbol for c in news_classes), None)
+    return event_score(news_events, symbol, now)
