@@ -38,6 +38,7 @@ def test_end_to_end_with_injected_transport(monkeypatch):
     assert live["Tavan-DNA"].notna().all() and live["Technical"].notna().all()
     assert live["Entry"].notna().all()
     assert run.snapshot["universe"]["data"]["size"] == 4
+    assert "screens" in run.snapshot and run.snapshot["screens"]["status"] in ("OK", "MISSING")
     assert isinstance(table, pd.DataFrame)
 
 

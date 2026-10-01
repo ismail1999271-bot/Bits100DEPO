@@ -72,6 +72,11 @@ def main() -> None:
             _table(snap["tavan_dna_leaders"], "Tavan-DNA Leaders")
             _table(snap["institutional_flow"], "Institutional Flow")
             _table(snap["risk"], "Risk")
+        scr = snap.get("screens")
+        if scr and scr.get("status") == "OK":
+            st.subheader("Hazır Taramalar (aday havuzu, sinyal değil)")
+            st.dataframe(pd.DataFrame(scr["data"]), use_container_width=True)
+            st.caption(scr["note"] + " · " + ", ".join(f"{k}: {v}" for k, v in scr["labels"].items()))
         paper = snap["paper_trading"]
         st.subheader("Paper Trading (simülasyon)")
         if paper["status"] == "OK":

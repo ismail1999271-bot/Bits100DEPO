@@ -9,6 +9,7 @@ the provider board; no ranking is produced from partial or synthetic data.
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
@@ -141,6 +142,14 @@ def run_research(
         details = {sym: {"Chart": rep} for sym, rep in build_charts(frame, top, chart_dir).items()}
     snapshot = build_snapshot(now=now, universe=universe, provider_statuses=tuple(board.values()), ranking=ranking,
                               symbol_details=details)
+    from .scan_presets import SCREENS, matches
+
+    hits = matches(tech)
+    snapshot["screens"] = {"status": "OK" if not hits.empty else "MISSING",
+                           "labels": {k: v.label for k, v in SCREENS.items()},
+                           "data": None if hits.empty else json.loads(hits.reset_index().to_json(orient="records")),
+                           "reason": None if not hits.empty else "no symbol matched any screen",
+                           "note": "Taramalar yalnızca aday havuzunu daraltır; sinyal değildir."}
     return ResearchRun("OK", "ranked", tuple(board.values()), ranking, snapshot)
 
 
