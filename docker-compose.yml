@@ -18,5 +18,12 @@ services:
     depends_on:
       - scanner
     restart: unless-stopped
+  live:
+    build: .
+    command: ["streamlit", "run", "dashboard/live.py", "--server.address=0.0.0.0", "--server.port=8502"]
+    ports:
+      - "8502:8502"
+    env_file: .env          # BIST_DATA_BACKEND=borsapy (15 dk gecikmeli) veya lisanslı sağlayıcı
+    restart: unless-stopped
 volumes:
   artifacts:

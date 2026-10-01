@@ -60,7 +60,8 @@ class BorsapyTransport:
     """Callable with the ``ProviderClient`` transport signature: (spec, params) -> records."""
 
     def __init__(self, ticker_factory: Callable[[str], Any] | None = None,
-                 now: Callable[[], datetime] | None = None) -> None:
+                 now: Callable[[], datetime] | None = None, max_workers: int = 8) -> None:
+        self.max_workers = max_workers
         self._factory = ticker_factory
         self._now = now or (lambda: datetime.now(timezone.utc))
         self.skipped: dict[str, str] = {}
@@ -75,12 +76,36 @@ class BorsapyTransport:
         now = self._now()
         rows: list[dict[str, Any]] = []
         self.skipped = {}
-        for symbol in symbols:
+        def one(symbol: str):
             try:
                 frame = factory(symbol).history(start=params.get("start"), end=params.get("end"), interval="1d")
-                rows.extend(frame_to_rows(symbol, frame, now))
+                return frame_to_rows(symbol, frame, now)
             except Exception as exc:
                 self.skipped[symbol] = str(exc)[:120]
+                return []
+
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=self.max_workers) as pool:
+            for part in pool.map(one, symbols):
+                rows.extend(part)
         if not rows:
             raise ProviderError(f"borsapy returned no bars (skipped={len(self.skipped)})")
         return rows
+
+
+def list_symbols(companies_fn=None) -> list[str]:
+    """All currently listed BIST tickers from ``borsapy.companies()`` (live-view universe)."""
+    try:
+        if companies_fn is None:
+            import borsapy
+
+            companies_fn = borsapy.companies
+        frame = companies_fn()
+        symbols = [str(t).strip().upper() for t in frame["ticker"].tolist() if str(t).strip()]
+    except Exception as exc:
+        raise ProviderError(f"borsapy companies() failed: {exc}") from exc
+    symbols = list(dict.fromkeys(symbols))
+    if not symbols:
+        raise ProviderError("borsapy returned an empty company list")
+    return symbols

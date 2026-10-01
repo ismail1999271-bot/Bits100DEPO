@@ -61,3 +61,13 @@ Still open: analyst-consensus "expectation surprise" (no provider), dashboard/Te
 | `telegram_notify.SignalChangeTracker` | Yalnızca durum değişince bildirim | Bozuk state dosyası çökertmez. |
 | `chart_analysis.py` | Mum grafiği, EMA/SMA, Bollinger, destek/direnç, formasyon, RSI/MACD | Pivotlar sağdan `confirm` bar ile doğrulanır (sızıntı yok); formasyonlar tahmin değildir. Dashboard "Hisse detayı" içinde. |
 | `scripts/run_daily.py`, `Dockerfile`, `docker-compose.yml`, `daily-research.yml` | Günlük çalıştırma / konteyner | Sağlayıcı yoksa BLOCKED snapshot üretir. |
+
+## Phase 15 – Canlı BIST takip ekranı (`dashboard/live.py`)
+
+`streamlit run dashboard/live.py` (Docker: `live` servisi, port 8502). Tüm listelenen BIST hisseleri (evren: `BIST_SYMBOLS`/`BIST_UNIVERSE_URL`, `BIST_DATA_BACKEND=borsapy` ise `borsapy.companies()`).
+
+* `live_board.py`: tavan/taban mesafesi, gün içi konum, rel. hacim, RSI/ATR/trend/kırılım, STALE işareti, uyarı üretimi.
+* `live_feed.py`: fail-closed yükleyici. Kaynak yoksa BLOCKED; örnek veri gösterilmez.
+* Sekmeler: Piyasa Haritası, Tüm Hisseler (filtre/arama), Hareketliler, Tavan/Taban, Hisse Analizi (grafik, destek/direnç, formasyon), Uyarılar. Otomatik yenileme 30–300 sn.
+* Kaynak notu: BorsaPy ~15 dk gecikmeli ve kişisel/eğitim lisanslıdır; gerçek zamanlı için lisanslı Level-1 sağlayıcı gerekir (şu an bağlı değil).
+* Doğrulama: birim testleri + Streamlit AppTest + tarayıcı ekran görüntüsü, hepsi **sentetik test verisiyle**. Gerçek BorsaPy çağrıları bulut ortamında erişilemediği için denenmedi.

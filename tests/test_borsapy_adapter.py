@@ -60,3 +60,20 @@ def test_other_domains_rejected_and_board_reflects_backend():
         BorsapyTransport(FakeTicker)(SPECS["kap"], {"symbols": "A"})
     board = {s.domain: s for s in status_board({"BIST_DATA_BACKEND": "borsapy"})}
     assert board["ohlcv"].status == CONNECTED and board["kap"].status == "MISSING"
+
+
+def test_list_symbols_and_universe_fallback(monkeypatch):
+    import pandas as pd
+
+    from bist_hunter.borsapy_adapter import list_symbols
+    from bist_hunter.real_adapters import load_symbol_universe
+
+    frame = pd.DataFrame({"ticker": ["thyao", "GARAN", "THYAO", " "]})
+    assert list_symbols(lambda: frame) == ["THYAO", "GARAN"]
+    with pytest.raises(ProviderError):
+        list_symbols(lambda: pd.DataFrame({"ticker": []}))
+    monkeypatch.delenv("BIST_UNIVERSE_URL", raising=False)
+    monkeypatch.delenv("BIST_SYMBOLS", raising=False)
+    monkeypatch.delenv("BIST_DATA_BACKEND", raising=False)
+    with pytest.raises(ProviderError):
+        load_symbol_universe()  # no backend and no list -> still fail-closed
