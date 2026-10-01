@@ -39,6 +39,7 @@ def rank_research(
     *,
     min_score: float = 70.0,
     min_coverage: float = 0.40,
+    bypass=None,
 ) -> pd.DataFrame:
     by_symbol = {item.symbol.upper(): item for item in items}
     outside = set(by_symbol) - set(universe.symbols)
@@ -61,7 +62,10 @@ def rank_research(
         tavan = item.tavan_risk
         if tavan is not None:
             reasons += [f"BLOCK:{b}" for b in tavan.block_reasons] + list(tavan.warnings)
-        blocked = (not gate.passed) or (tavan is not None and tavan.status == "BLOCKED")
+        bypassed = bypass is not None and bypass.active
+        if bypassed:
+            reasons.append("MARKET_BYPASS")
+        blocked = (not gate.passed) or bypassed or (tavan is not None and tavan.status == "BLOCKED")
         status = "BLOCKED" if blocked else score.status
         rows.append({
             "Symbol": symbol,

@@ -84,6 +84,8 @@ class ProviderStatus:
 
 def configuration_status(spec: ProviderSpec, env: Mapping[str, str] | None = None) -> ProviderStatus:
     values = os.environ if env is None else env
+    if spec.domain == "ohlcv" and values.get("BIST_DATA_BACKEND", "").strip().lower() == "borsapy":
+        return ProviderStatus(spec.domain, spec.label, CONNECTED, "borsapy backend selected (not yet probed)")
     endpoint = values.get(spec.endpoint_env, "").strip()
     token = values.get(spec.token_env, "").strip()
     if not endpoint:
@@ -136,8 +138,23 @@ class ProviderClient:
         )
         return provider.fetch(params)
 
+    def _fetch_borsapy(self, spec: ProviderSpec, params: dict[str, str], now: datetime):
+        from .borsapy_adapter import BorsapyTransport
+
+        transport = self._transport if self._transport != self._http else BorsapyTransport(now=lambda: now)
+        try:
+            rows = parse_json_records(transport(spec, params))
+        except ProviderError as exc:
+            return ProviderStatus(spec.domain, spec.label, BLOCKED, f"borsapy: {exc}"), []
+        status, parsed = evaluate_batch(spec, rows, now=now)
+        note = "borsapy (~15dk gecikmeli, kişisel/eğitim lisansı)"
+        return ProviderStatus(status.domain, status.label, status.status, f"{status.reason} · {note}",
+                              status.rows, status.newest), parsed
+
     def fetch(self, domain: str, params: dict[str, str], *, now: datetime) -> tuple[ProviderStatus, list[Any]]:
         spec = SPECS[domain]
+        if domain == "ohlcv" and self.env.get("BIST_DATA_BACKEND", "").strip().lower() == "borsapy":
+            return self._fetch_borsapy(spec, params, now)
         configured = configuration_status(spec, self.env)
         if configured.status != CONNECTED:
             return configured, []

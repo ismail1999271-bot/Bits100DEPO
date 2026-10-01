@@ -64,3 +64,18 @@ def test_ranking_blocks_vbts_even_with_high_score():
     ])
     assert list(table["Symbol"]) == ["BBB", "AAA"]
     assert table.loc[1, "Status"] == "BLOCKED" and "BLOCK:VBTS_TEK_FIYAT" in table.loc[1, "Reasons"]
+
+
+def test_market_bypass_blocks_whole_ranking():
+    from datetime import datetime, timezone
+
+    from bist_hunter.fail_closed import GateInput
+    from bist_hunter.news_classifier import MarketBypass
+    from bist_hunter.research_ranking import SymbolResearch, rank_research
+    from bist_hunter.universe import Universe
+
+    now = datetime(2026, 9, 30, 10, tzinfo=timezone.utc)
+    uni = Universe("T", ("AAA",), "2026-09-30", "test")
+    item = SymbolResearch("AAA", GateInput("AAA", now, now, 3600, None), {"technical": 90.0})
+    out = rank_research(uni, [item], bypass=MarketBypass(True, ("x",), now))
+    assert out.iloc[0]["Status"] == "BLOCKED" and "MARKET_BYPASS" in out.iloc[0]["Reasons"]
