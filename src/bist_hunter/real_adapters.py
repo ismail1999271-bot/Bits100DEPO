@@ -109,6 +109,10 @@ def load_symbol_universe() -> list[str]:
         return symbols
     raw = os.getenv("BIST_SYMBOLS", "")
     symbols = list(dict.fromkeys(item.strip().upper().removesuffix(".IS") for item in raw.split(",") if item.strip()))
+    if not symbols and os.getenv("BIST_DATA_BACKEND", "").strip().lower() == "borsapy":
+        from .borsapy_adapter import list_symbols
+
+        return list_symbols()
     if not symbols:
         raise ProviderError("BIST_UNIVERSE_URL/BIST_SYMBOLS is not configured; refusing to scan a partial universe")
     return symbols

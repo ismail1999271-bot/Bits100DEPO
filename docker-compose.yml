@@ -1,0 +1,29 @@
+# Research-only stack: scanner writes the snapshot, dashboard reads it. No order routing exists.
+services:
+  scanner:
+    build: .
+    command: ["sh", "-c", "while true; do python scripts/run_daily.py --telegram; sleep 900; done"]
+    env_file: .env          # provider URLs/tokens, TELEGRAM_*; BIST_DATA_BACKEND=borsapy is optional
+    volumes:
+      - artifacts:/app/artifacts
+    restart: unless-stopped
+  dashboard:
+    build: .
+    ports:
+      - "8501:8501"
+    environment:
+      - BITS100_SNAPSHOT=/app/artifacts/dashboard/snapshot.json
+    volumes:
+      - artifacts:/app/artifacts
+    depends_on:
+      - scanner
+    restart: unless-stopped
+  live:
+    build: .
+    command: ["streamlit", "run", "dashboard/live.py", "--server.address=0.0.0.0", "--server.port=8502"]
+    ports:
+      - "8502:8502"
+    env_file: .env          # BIST_DATA_BACKEND=borsapy (15 dk gecikmeli) veya lisanslı sağlayıcı
+    restart: unless-stopped
+volumes:
+  artifacts:

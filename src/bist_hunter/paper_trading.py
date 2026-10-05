@@ -1,6 +1,24 @@
-"""Safe paper-trading ledger with hard fail-safe limits and audit records."""
+"""Safe paper-trading ledger with hard limits and realistic execution costs."""
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionModel:
+    """Deterministic execution-cost model; never contacts an exchange."""
+
+    spread_bps: float = 8.0
+    slippage_bps: float = 5.0
+
+    def __post_init__(self) -> None:
+        if self.spread_bps < 0 or self.slippage_bps < 0:
+            raise ValueError("spread/slippage must be non-negative")
+
+    def buy_price(self, mid_price: float) -> float:
+        return mid_price * (1.0 + (self.spread_bps / 2 + self.slippage_bps) / 10_000)
+
+    def sell_price(self, mid_price: float) -> float:
+        return mid_price * (1.0 - (self.spread_bps / 2 + self.slippage_bps) / 10_000)
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +56,7 @@ class AuditEvent:
 class PaperBroker:
     equity_try: float
     limits: RiskLimits = field(default_factory=RiskLimits)
+    execution: ExecutionModel = field(default_factory=ExecutionModel)
     positions: dict[str, Position] = field(default_factory=dict)
     audit: list[AuditEvent] = field(default_factory=list)
     day_start_equity_try: float | None = None
@@ -52,7 +71,7 @@ class PaperBroker:
         return self.equity_try < start * (1 - self.limits.max_daily_loss_pct)
 
     def can_buy(self, symbol: str, quantity: float, price: float) -> tuple[bool, str]:
-        notional = quantity * price
+        notional = quantity * self.execution.buy_price(price)
         if quantity <= 0 or price <= 0:
             return False, "INVALID_ORDER"
         if notional > self.limits.max_order_notional_try:
@@ -69,15 +88,17 @@ class PaperBroker:
         allowed, _ = self.can_buy(symbol, quantity, price)
         if not allowed:
             return False
-        self.positions[symbol] = Position(symbol, quantity, price)
-        self.audit.append(AuditEvent(datetime.now(timezone.utc), "BUY", symbol, quantity, price, reason))
+        fill = self.execution.buy_price(price)
+        self.positions[symbol] = Position(symbol, quantity, fill)
+        self.audit.append(AuditEvent(datetime.now(timezone.utc), "BUY", symbol, quantity, fill, reason))
         return True
 
     def sell(self, symbol: str, price: float, reason: str) -> bool:
         position = self.positions.pop(symbol, None)
         if position is None or price <= 0:
             return False
-        pnl = (price - position.entry_price) * position.quantity
+        fill = self.execution.sell_price(price)
+        pnl = (fill - position.entry_price) * position.quantity
         self.equity_try += pnl
-        self.audit.append(AuditEvent(datetime.now(timezone.utc), "SELL", symbol, position.quantity, price, reason))
+        self.audit.append(AuditEvent(datetime.now(timezone.utc), "SELL", symbol, position.quantity, fill, reason))
         return True

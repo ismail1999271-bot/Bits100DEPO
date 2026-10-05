@@ -1,19 +1,26 @@
 # Bits100DEPO implementation status
 
-Updated: 2026-09-07
+Updated: 2026-09-16
 
 ## Implemented in code
 
 - Package/import structure and CI gates
 - Leakage-safe OHLCV normalization and forward event labels
 - Tavan/upper-limit event primitives
-- Explainable 0-100 candidate scoring
-- Daily ranking with an explicit no-quality-signal state
+- Leakage-safe Tavan-DNA feature engineering and chronological model training
+- Three-way historical Tavan-DNA backtest runner: train / validation / untouched holdout
+- Expanded Tavan-DNA walk-forward validation with an untouched final holdout
+- E2E Tavan-DNA probability -> Quant Score -> auction trajectory ranking path
 - Cost-aware backtest primitives and chronological walk-forward splits
-- Precision/recall, hit-day and drawdown evaluation primitives
+- Precision/recall, expectancy, hit-rate, drawdown and risk-adjusted validation primitives
+- Explainable 0-100 candidate scoring with coverage-aware confidence
+- Daily ranking and opening-auction trajectory at 09:40 / 09:45 / 09:50 / 09:55
+- Single BIST100+ universe construction and global scan interface
 - Fund-flow and fund-holding Smart Money exposure proxy
 - Unified opportunity quality gate with manipulation-risk rejection
 - Provider-neutral HTTP adapters for market data, KAP, news and social feeds
+- Strict point-in-time market/event provider contracts and duplicate/staleness rejection
+- Provider readiness matrix that fails closed when endpoints or credentials are missing
 - Institutional data fabric for market, fundamentals, estimates, holdings, flows, research, transactions and alternative data
 - Institutional Consensus across broker/manager views
 - Broker recommendation consensus scoring
@@ -21,32 +28,31 @@ Updated: 2026-09-07
 - Performance leaderboard with rank change and momentum acceleration
 - News/event deduplication and source-quality/manipulation controls
 - Market regime / Fear & Greed-style research composite
-- Paper-trading ledger, audit events and hard position/order/loss limits
+- Paper-trading ledger with deterministic spread/slippage execution, audit events and hard limits
 - 06:00-safe morning orchestration and GitHub Actions schedule
-- Claude Technology Scout runtime
+- Claude Technology Scout and GPT-6 Astra research runtimes
 - Scout -> Quant Researcher -> Signal Auditor automated research-loop workflow
 - Leakage-safe experiment feedback ledger for agent research memory
 - Fail-closed production readiness gates and CLI
 
 ## External activation still required
 
-The repository now has the wiring/contracts for all requested production layers, but real credentials/data cannot be fabricated or supplied by the codebase:
+The code is wired for real providers, but credentials and licensed access are external prerequisites and are never fabricated by the repository:
 
-- A compliant/licensed BIST historical/intraday provider must be configured in `BIST_MARKET_DATA_URL` / related secrets.
-- A real KAP feed/adapter must be configured and validated against the selected source.
-- Fund-flow and holdings data must come from a validated source; Smart Money remains an exposure proxy, not transaction truth.
-- Broker Consensus requires a real normalized broker-research feed in `BROKER_DATA_URL`.
-- Institutional Intelligence requires a real authorized provider in `INSTITUTIONAL_DATA_URL`.
-- Claude research automation requires `ANTHROPIC_API_KEY`.
-- Telegram delivery requires `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`.
+- BIST Level-2/Level-2+ historical/intraday feed: configure a compliant licensed provider and its endpoint/credential.
+- KAP: configure and validate a real subscribed KAP-compatible feed.
+- News: configure a real provider and normalize its point-in-time publication timestamps.
+- Fund flow / holdings: configure a validated source; Smart Money remains a proxy until source truth is available.
+- Broker / institutional: configure real normalized research and holdings/transaction feeds.
+- GPT-6 Astra / Claude: configure the corresponding API secrets for research automation.
+- Telegram: configure `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` only after the research/paper pipeline is validated.
 
 ## Validation / training
 
-- Historical training workflow requests up to ~10 years of BIST bars and already exceeds the requested 5–6 year minimum when the provider returns sufficient history.
-- Walk-forward/backtest primitives are present, but final performance numbers must be produced from real historical data and a frozen final holdout.
-- Paper trading is real-market-data based and persists state/metrics, but remains strictly non-live-order execution.
-- Agent feedback records completed experiment results only; it cannot alter production rules directly.
+The repository contains the real historical execution path: provider CSV -> validation -> Tavan-DNA features -> chronological walk-forward -> untouched final holdout -> cost-aware metrics. No performance claim is valid until this runner is executed on real historical BIST data.
+
+The live auction path is fail-closed: licensed Level-2/2+ observations are validated before entering the 09:40/09:45/09:50/09:55 trajectory. Missing indicative price/order-book data cannot become a synthetic signal.
 
 ## Production gate
 
-Live trading is **BLOCKED by design** until all required providers are configured, historical event-study/walk-forward results pass configured quality thresholds, model selection is frozen, and the final holdout remains untouched. The system must fail closed rather than invent missing data.
+Automatic exchange order placement is intentionally absent. The system remains a research, signal-ranking and paper-trading platform. Production readiness requires real provider health, data integrity, walk-forward validation, an untouched final holdout and sufficient paper-trading evidence. Missing prerequisites keep the gate BLOCKED.

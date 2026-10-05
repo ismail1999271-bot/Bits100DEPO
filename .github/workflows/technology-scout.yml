@@ -7,21 +7,28 @@ on:
 
 jobs:
   scout:
-    if: ${{ secrets.ANTHROPIC_API_KEY != '' }}
     runs-on: ubuntu-latest
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
     steps:
+      - name: Provider preflight
+        if: ${{ env.ANTHROPIC_API_KEY == '' }}
+        run: echo 'BLOCKED_NO_AI_PROVIDER - ANTHROPIC_API_KEY not configured; scout skipped.'
       - uses: actions/checkout@v4
+        if: ${{ env.ANTHROPIC_API_KEY != '' }}
       - uses: actions/setup-python@v5
+        if: ${{ env.ANTHROPIC_API_KEY != '' }}
         with:
           python-version: '3.11'
-      - run: python -m pip install --upgrade pip
-      - run: pip install -e '.[agents]'
+      - if: ${{ env.ANTHROPIC_API_KEY != '' }}
+        run: pip install -e '.[agents]'
       - name: Run Claude technology scout
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        if: ${{ env.ANTHROPIC_API_KEY != '' }}
         run: python scripts/run_technology_scout.py
       - name: Upload scout report
+        if: ${{ env.ANTHROPIC_API_KEY != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: technology-scout-report
           path: technology_scout_report.md
+          if-no-files-found: ignore
